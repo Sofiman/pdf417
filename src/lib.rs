@@ -4,6 +4,8 @@ use tables::*;
 
 const START: [bool; 17] = [true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false];
 const END: [bool; 18] = [true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, true];
+pub const START_PATTERN_LEN: usize = START.len();
+pub const END_PATTERN_LEN: usize = END.len();
 
 macro_rules! append {
     ($sto:ident, $tb:ident, $i:ident, $bits:expr) => {
@@ -100,94 +102,54 @@ pub fn generate_text(high_level: &[u16], rows: usize, cols: usize, level: u8, st
     }
 }
 
+#[cfg(test)]
 mod tests {
-    use super::*;
-    const WHITE: &str = "\x1B[38;2;255;255;255m█";
-    const BLACK: &str = "\x1B[38;2;0;0;0m█";
-    const INPUT: [u16; 12] = [10, 900, 7 * 30 + 4, 11 * 30 + 11, 14 * 30 + 26, 22 * 30 + 14, 17 * 30 + 11, 3 * 30 + 29, 10 * 30 + 29, 900, 0, 0]; // HELLO WORLD!
-    //const INPUT: [u16; 6] = [4, 900, 7 * 30 + 7, 7 * 30 + 7, 0, 0]; // HELLO WORLD!
-    //const INPUT: [u16; 6] = [4, 900, 19 * 30 + 4, 18 * 30 + 19, 0, 0]; // TEST
-    //const INPUT: [u16; 20] = [16, 902, 1, 278, 827, 900, 295, 902, 2, 326, 823, 544, 900, 149, 900, 900, 0, 0, 0, 0];
+    use super::generate_ecc;
 
-    #[test]
-    fn test_generate() {
-        const PADDING: usize = 4;
-        const COLS: usize = 3;
-        const ROWS: usize = 4;
-        const ROW_SIZE: usize = (COLS + 2) * 17 + START.len() + END.len();
-        const LEVEL: u8 = 0;
-
-        let mut input = INPUT.clone();
-        generate_ecc(&mut input, LEVEL);
-        let mut storage = [false; ROW_SIZE * ROWS];
-        generate_text(&input, ROWS, COLS, LEVEL, &mut storage);
-
-
-        let mut col = 0;
-        for _ in 0..((PADDING+1)/2) {
-            println!("{}", str::repeat(WHITE, ROW_SIZE + PADDING * 2));
-        }
-        print!("{}", str::repeat(WHITE, PADDING));
-        for on in storage {
-            print!("{}", if on { BLACK } else { WHITE });
-            col += 1;
-            if col == ROW_SIZE {
-                col = 0;
-                print!("{b}\n{b}", b = str::repeat(WHITE, PADDING));
-            }
-        }
-        println!("{}", str::repeat(WHITE, ROW_SIZE + PADDING));
-        for _ in 0..((PADDING-1)/2) {
-            println!("{}", str::repeat(WHITE, ROW_SIZE + PADDING * 2));
-        }
-        println!("\x1B[0m");
-        todo!();
-    }
-
-    const inputData: [u16; 16] = [16, 902, 1, 278, 827, 900, 295, 902, 2, 326, 823, 544, 900, 149, 900, 900];
+    const INPUT_DATA: [u16; 16] = [16, 902, 1, 278, 827, 900, 295, 902, 2, 326, 823, 544, 900, 149, 900, 900];
 
     #[test]
     fn test_ecc_l0() {
         let expected: [u16; 2] = [156, 765];
-        let mut data = [0u16; inputData.len() + 2];
-        data[..inputData.len()].copy_from_slice(&inputData);
+        let mut data = [0u16; INPUT_DATA.len() + 2];
+        data[..INPUT_DATA.len()].copy_from_slice(&INPUT_DATA);
         generate_ecc(&mut data, 0);
-        assert_eq!(data[inputData.len()..], expected);
+        assert_eq!(data[INPUT_DATA.len()..], expected);
     }
 
     #[test]
     fn test_ecc_l1() {
         let expected: [u16; 4] = [168, 875, 63, 355];
-        let mut data = [0u16; inputData.len() + 4];
-        data[..inputData.len()].copy_from_slice(&inputData);
+        let mut data = [0u16; INPUT_DATA.len() + 4];
+        data[..INPUT_DATA.len()].copy_from_slice(&INPUT_DATA);
         generate_ecc(&mut data, 1);
-        assert_eq!(data[inputData.len()..], expected);
+        assert_eq!(data[INPUT_DATA.len()..], expected);
     }
 
     #[test]
     fn test_ecc_l2() {
         let expected: [u16; 8] = [628, 715, 393, 299, 863, 601, 169, 708];
-        let mut data = [0u16; inputData.len() + 8];
-        data[..inputData.len()].copy_from_slice(&inputData);
+        let mut data = [0u16; INPUT_DATA.len() + 8];
+        data[..INPUT_DATA.len()].copy_from_slice(&INPUT_DATA);
         generate_ecc(&mut data, 2);
-        assert_eq!(data[inputData.len()..], expected);
+        assert_eq!(data[INPUT_DATA.len()..], expected);
     }
 
     #[test]
     fn test_ecc_l3() {
         let expected: [u16; 16] = [232, 176, 793, 616, 476, 406, 855, 445, 84, 518, 522, 721, 607, 2, 42, 578];
-        let mut data = [0u16; inputData.len() + 16];
-        data[..inputData.len()].copy_from_slice(&inputData);
+        let mut data = [0u16; INPUT_DATA.len() + 16];
+        data[..INPUT_DATA.len()].copy_from_slice(&INPUT_DATA);
         generate_ecc(&mut data, 3);
-        assert_eq!(data[inputData.len()..], expected);
+        assert_eq!(data[INPUT_DATA.len()..], expected);
     }
 
     #[test]
     fn test_ecc_l4() {
         let expected: [u16; 32] = [281, 156, 276, 668, 44, 252, 877, 30, 549, 856, 773, 639, 420, 330, 693, 329, 283, 723, 480, 482, 102, 925, 535, 892, 374, 472, 837, 331, 343, 608, 390, 364];
-        let mut data = [0u16; inputData.len() + 32];
-        data[..inputData.len()].copy_from_slice(&inputData);
+        let mut data = [0u16; INPUT_DATA.len() + 32];
+        data[..INPUT_DATA.len()].copy_from_slice(&INPUT_DATA);
         generate_ecc(&mut data, 4);
-        assert_eq!(data[inputData.len()..], expected);
+        assert_eq!(data[INPUT_DATA.len()..], expected);
     }
 }
