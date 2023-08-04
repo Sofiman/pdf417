@@ -22,6 +22,8 @@ macro_rules! append {
 }
 
 pub fn generate_ecc(codewords: &mut [u16], level: u8) {
+    assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
+
     let factors: &[u16] = match level {
         0 => &ECC_L0,
         1 => &ECC_L1,
@@ -56,8 +58,11 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
 }
 
 pub fn generate_text(high_level: &[u16], rows: usize, cols: usize, level: u8, storage: &mut [bool]) {
-    let mut table = 0;
+    assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
+    assert!(high_level.len() == rows*cols,
+        "codewords will not fit in a {rows}x{cols} configuration");
 
+    let mut table = 0;
     let mut i = 0;
     let mut col = 0;
     let mut row = 0;
