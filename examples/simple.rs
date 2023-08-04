@@ -15,10 +15,11 @@ fn main() {
     const LEVEL: u8 = 0;
 
     let mut input = INPUT.clone();
-    generate_ecc(&mut input, LEVEL);
-    let mut storage = [false; ROW_SIZE * ROWS];
-    generate_text(&input, ROWS, COLS, LEVEL, &mut storage);
+    ecc::generate_ecc(&mut input, LEVEL);
 
+    let mut storage = [false; ROW_SIZE * ROWS];
+    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL);
+    pdf417.render(&mut storage);
 
     let mut col = 0;
     for _ in 0..((PADDING+1)/2) {
