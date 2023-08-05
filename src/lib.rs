@@ -1,10 +1,15 @@
-//#![no_std]
+#![no_std]
 #![allow(dead_code)]
 
 mod tables;
 pub mod ecc;
 
 use tables::HL_TO_LL;
+
+use bnum::BUintD32;
+use num_traits::cast::ToPrimitive;
+use num_integer::Integer;
+type U160 = BUintD32::<5>;
 
 const START: [bool; 17] = [true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false];
 const END: [bool; 18] = [true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, true];
@@ -26,9 +31,9 @@ macro_rules! append {
 }
 
 macro_rules! push {
-    ($cws:ident, $i:ident, $rh:ident, $($cw:literal),+, $mode:ident = $v:literal) => {{
-        $mode = $v;
+    ($cws:ident, $i:ident, $rh:ident, $($cw:expr),+; $post:ident = $new:expr) => {{
         push!($cws, $i, $rh, $($cw),+);
+        $post = $new;
     }};
     ($cws:ident, $i:ident, $rh:ident, $head:expr, $($cw:expr),+) => {
         push!($cws, $i, $rh, $head);
@@ -58,11 +63,11 @@ macro_rules! push {
     }}
 }
 
-pub fn encode_text(s: &str, codewords: &mut [u16]) -> Result<(), ()> {
+pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
     assert!(s.is_ascii());
     let s = s.as_bytes();
 
-    let mut mode: u8 = 0; // 0: Upper, 1: Lower, 2: Mixed, 3: Punc
+    let mut mode: u8 = 0; // 0: Upper, 1: Lower, 2: Mixed, 3: Punc, 4: Numeric
     let mut i = 1;
     let mut k = 0;
     let mut right = false; // left = upper 8 bits | right: lower 8 bits
@@ -74,99 +79,89 @@ pub fn encode_text(s: &str, codewords: &mut [u16]) -> Result<(), ()> {
                 match mode {
                     0 => (),
                     1 => if k + 1 < s.len() && ((b'a'..=b'z').contains(&s[k + 1]) || s[k + 1] == b' ') {
-                        push!(codewords, i, right, 27);
+                        push!(out, i, right, 27);
                     } else {
-                        push!(codewords, i, right, 29, 29, mode = 0);
+                        push!(out, i, right, 29, 29; mode = 0);
                     },
-                    2 => push!(codewords, i, right, 28, mode = 0),
-                    3 => push!(codewords, i, right, 29, mode = 0),
-                    _ => unreachable!(),
+                    2 => push!(out, i, right, 28; mode = 0),
+                    3 => push!(out, i, right, 29; mode = 0),
+                    _ => unreachable!("Unknown mode {mode}"),
                 }
-                push!(codewords, i, right, c - b'A');
-                k += 1;
+                push!(out, i, right, c - b'A'; k = k + 1);
             },
             b'a'..=b'z' => {
                 match mode {
-                    0 | 2 => push!(codewords, i, right, 27, mode = 1),
+                    0 | 2 => push!(out, i, right, 27; mode = 1),
                     1 => (),
-                    3 => push!(codewords, i, right, 29, 27, mode = 1),
-                    _ => unreachable!(),
+                    3 => push!(out, i, right, 29, 27; mode = 1),
+                    _ => unreachable!("Unknown mode {mode}"),
                 }
-                push!(codewords, i, right, c - b'a');
-                k += 1;
+                push!(out, i, right, c - b'a'; k = k + 1);
             },
-            b'0'..=b'9' if mode == 2 => {
-                push!(codewords, i, right, c - b'0');
-                k += 1;
-            },
+            b'0'..=b'9' if mode == 2 => push!(out, i, right, c - b'0'; k = k + 1),
             b'0'..=b'9' => {
                 let mut end = k + 1;
                 while end < s.len() && end-k < 44 && (b'0'..=b'9').contains(&s[end]) {
                     end += 1;
                 }
 
-                if end-k <= 13 {
+                if end-k <= 13 && mode != 4 {
                     match mode {
-                        0 | 1 => push!(codewords, i, right, 28, mode = 2),
+                        0 | 1 => push!(out, i, right, 28; mode = 2),
                         2 => (),
-                        3 => push!(codewords, i, right, 29, 28, mode = 2),
-                        _ => unreachable!(),
+                        3 => push!(out, i, right, 29, 28; mode = 2),
+                        _ => unreachable!("Unknown mode {mode}"),
                     }
                     while k < end {
-                        push!(codewords, i, right, s[k] - b'0');
-                        k += 1;
+                        push!(out, i, right, s[k] - b'0'; k = k + 1);
                     }
                 } else {
-                    use bnum::BUintD32;
-                    use num_traits::cast::ToPrimitive;
-                    use num_integer::Integer;
+                    if mode != 4 {
+                        push!(out, i, right, 902; mode = 4);
+                    }
 
-                    push!(codewords, i, right, 902);
-
-                    let b900 = BUintD32::<5>::from(900u16);
-                    let mut b = BUintD32::<5>::from_str_radix(core::str::from_utf8(&s[k..end]).unwrap(), 10)
+                    let b900 = U160::from(900u16);
+                    let mut b = U160::from_str_radix(core::str::from_utf8(&s[k..end]).unwrap(), 10)
                         .expect("should fit");
-                    b += BUintD32::<5>::from(10u16).pow((end-k) as u32);
+                    b += U160::from(10u16).pow((end-k) as u32);
                     let nb = (end-k) / 3 + 1;
                     let mut count = 0;
 
-                    while b > BUintD32::<5>::ZERO {
+                    while b > U160::ZERO {
                         let (q, r) = b.div_rem(&b900);
                         b = q;
-                        codewords[i + nb - count - 1] = r.to_u16().ok_or(())?;
+                        out[i + nb - count - 1] = r.to_u16().ok_or(())?;
                         count += 1;
                     }
 
                     k = end;
                     i += nb;
+                }
 
-                    if k < s.len() {
-                        push!(codewords, i, right, 900);
-                    }
-                    println!("exiting numeric mode");
+                if mode == 4 && k < s.len() && !(b'0'..=b'9').contains(&s[k]) {
+                    push!(out, i, right, 900; mode = 0);
                 }
             },
-            b' ' if mode == 3 => {
-                push!(codewords, i, right, 29, 26, mode = 0);
-                k += 1;
-            },
             b' ' => {
-                push!(codewords, i, right, 26);
-                k += 1;
+                if mode == 3 { push!(out, i, right, 29; mode = 0) };
+                push!(out, i, right, 26; k = k + 1);
             },
             _ => unreachable!()
         };
     }
 
     if right { 
-        codewords[i] = codewords[i] * 30 + 29;
+        out[i] = out[i] * 30 + 29;
         i += 1;
     }
 
-    codewords[0] = i as u16; // length indicator
-    codewords[i..].fill(900);
+    out[0] = i as u16; // length indicator
+    out[i..].fill(900);
 
     Ok(())
+}
+
+fn encode_bigint() {
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +262,14 @@ mod tests {
         let mut codewords = [0u16; 12];
         encode_text("12345678987654321 num", &mut codewords).unwrap();
         assert_eq!(&codewords, &[12, 902, 190, 232, 499, 20, 504, 721, 900, 26 * 30 + 27, 13 * 30 + 20, 12 * 30 + 29]);
+    }
+
+    #[test]
+    fn test_generate_test_numeric_big() {
+        let mut codewords = [0u16; 20];
+        //           [                        p1                 ][ p2 ]
+        encode_text("123456789876543211234567898765432112345678987654321", &mut codewords).unwrap();
+        assert_eq!(&codewords, &[20, 902, 491, 81, 137, 725, 651, 455, 511, 858, 135, 138, 488, 568, 447, 553, 198, /* next */ 21, 715, 821]);
     }
 
     #[test]
