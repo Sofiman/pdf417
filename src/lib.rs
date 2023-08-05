@@ -1,4 +1,4 @@
-#![no_std]
+//#![no_std]
 #![allow(dead_code)]
 
 mod tables;
@@ -26,38 +26,36 @@ macro_rules! append {
 }
 
 macro_rules! push {
-    ($cws:ident, $i:ident, $rh:ident, $($cw:literal),+, $mode:ident = $v:literal) => {
-        {
-            $mode = $v;
-            push!($cws, $i, $rh, $($cw),+);
-        }
-    };
+    ($cws:ident, $i:ident, $rh:ident, $($cw:literal),+, $mode:ident = $v:literal) => {{
+        $mode = $v;
+        push!($cws, $i, $rh, $($cw),+);
+    }};
     ($cws:ident, $i:ident, $rh:ident, $head:expr, $($cw:expr),+) => {
         push!($cws, $i, $rh, $head);
         push!($cws, $i, $rh, $($cw),+);
     };
-    ($cws:ident, $i:ident, $rh:ident, $cw:expr) => {
-        {
-            let cw = $cw as u16;
-            if cw > 29 {
+    ($cws:ident, $i:ident, $rh:ident, $cw:expr) => {{
+        let cw = $cw as u16;
+        if cw > 29 {
+            if $rh {
                 $cws[$i] = $cws[$i] * 30 + 29;
                 $rh = false;
                 $i += 1;
+            }
 
-                $cws[$i] = cw;
+            $cws[$i] = cw;
+            $i += 1;
+        } else {
+            if $rh {
+                $cws[$i] = $cws[$i] * 30 + cw;
+                $rh = false;
                 $i += 1;
             } else {
-                if $rh {
-                    $cws[$i] = $cws[$i] * 30 + cw;
-                    $rh = false;
-                    $i += 1;
-                } else {
-                    $cws[$i] = cw;
-                    $rh = true;
-                }
+                $cws[$i] = cw;
+                $rh = true;
             }
         }
-    }
+    }}
 }
 
 pub fn encode_text(s: &str, codewords: &mut [u16]) -> Result<(), ()> {
@@ -145,10 +143,17 @@ pub fn encode_text(s: &str, codewords: &mut [u16]) -> Result<(), ()> {
                     if k < s.len() {
                         push!(codewords, i, right, 900);
                     }
+                    println!("exiting numeric mode");
                 }
             },
-            b' ' if mode == 3 => push!(codewords, i, right, 29, 26, mode = 0),
-            b' ' => push!(codewords, i, right, 26),
+            b' ' if mode == 3 => {
+                push!(codewords, i, right, 29, 26, mode = 0);
+                k += 1;
+            },
+            b' ' => {
+                push!(codewords, i, right, 26);
+                k += 1;
+            },
             _ => unreachable!()
         };
     }
@@ -268,7 +273,8 @@ mod tests {
     fn test_generate_test_text_with_digits() {
         let mut codewords = [0u16; 17];
         encode_text("encoded 0123456789 as digits", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[18, 27 * 30 + 4, 13 * 30 + 2, 14 * 30 + 3, 4 * 30 + 3, 26 * 30, 28 * 30 + 0, 1 * 30 + 2, 3 * 30 + 4, 5 * 30 + 6, 7 * 30 + 8, 9 * 30 + 26, 27 * 30 + 0, 18 * 30 + 26, 3 * 30 + 8, 6 * 30 + 8, 19 * 30 + 18]);
+        assert_eq!(&codewords, &[17, 27 * 30 + 4, 13 * 30 + 2, 14 * 30 + 3, 4 * 30 + 3, 26 * 30 + 28, 0 * 30 + 1, 2 * 30 + 3, 4 * 30 + 5, 6 * 30 + 7, 8 * 30 + 9,
+            26 * 30 + 27, 0 * 30 + 18, 26 * 30 + 3, 8 * 30 + 6, 8 * 30 + 19, 18 * 30 + 29]);
     }
 
     /*
