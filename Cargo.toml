@@ -2,7 +2,16 @@
 name = "pdf417"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Sofiane"]
+description = "No-std PDF417 encoder"
+documentation = "https://docs.rs/pdf417"
+readme = "README.md"
+repository = "https://github.com/Sofiman/pdf417/"
+license-file = "LICENSE"
+keywords = ["pdf417", "no-std", "embedded"]
+categories = ["encoding", "embedded", "no-std"]
 
 [dependencies]
+bnum = { version = "0.8.0", default-features = false, features = ["num-integer", "num-traits", "numtraits"] }
+num-integer = { version = "0.1.45", default-features = false }
+num-traits = { version = "0.2.16", default-features = false }
