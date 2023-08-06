@@ -13,6 +13,16 @@ type U160 = BUintD32::<5>;
 
 const START: [bool; 17] = [true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false];
 const END: [bool; 18] = [true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, true];
+
+const MIXED_CHAR_SET: [u8; 15] = [
+    b'&', b'\r', b'\t', b',', b':', b'#', b'-', b'.', b'$', b'/', b'+', b'%', b'*', b'=', b'^'
+];
+const PUNC_CHAR_SET: [u8; 29] = [
+    b';', b'<', b'>', b'@', b'[', b'\\', b']', b'_', b'`', b'~', b'!', b'\r', b'\t',
+    b',', b':', b'\n', b'-', b'.', b'$', b'/', b'"', b'|', b'*', b'(', b')', b'?',
+    b'{', b'}', b'\''
+];
+
 pub const START_PATTERN_LEN: usize = START.len();
 pub const END_PATTERN_LEN: usize = END.len();
 
@@ -63,14 +73,27 @@ macro_rules! push {
     }}
 }
 
-pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
+pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
+    // 2 char = 1 codeword; +1 for length indicator +4 for mode switches
+    let ecc_cw = ecc::ecc_count(level);
+    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 4, "output buffer not large enough");
+
+    let data_end = out.len()-ecc_cw;
+    let data_words = encode_text(s, &mut out[1..data_end]);
+    out[0] = data_end as u16;
+
+    ecc::generate_ecc(out, level);
+    return data_words + ecc_cw;
+}
+
+pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
     assert!(s.is_ascii());
     let s = s.as_bytes();
 
     let mut mode: u8 = 0; // 0: Upper, 1: Lower, 2: Mixed, 3: Punc, 4: Numeric
-    let mut i = 1;
+    let mut i = 0;
     let mut k = 0;
-    let mut right = false; // left = upper 8 bits | right: lower 8 bits
+    let mut right = false; // false = upper 8 bits | true = lower 8 bits
 
     while k < s.len() {
         let c = s[k];
@@ -116,13 +139,11 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
                         push!(out, i, right, s[k] - b'0'; k = k + 1);
                     }
                 } else {
-                    if mode != 4 {
-                        push!(out, i, right, 902; mode = 4);
-                    }
+                    if mode != 4 { push!(out, i, right, 902; mode = 4); }
 
                     let b900 = U160::from(900u16);
-                    let mut b = U160::from_str_radix(core::str::from_utf8(&s[k..end]).unwrap(), 10)
-                        .expect("should fit");
+                    let mut b = U160::from_str_radix(core::str::from_utf8(&s[k..end]).expect("only ascii"), 10)
+                        .expect("44 digits base 10 should fit in 160 bits");
                     b += U160::from(10u16).pow((end-k) as u32);
                     let nb = (end-k) / 3 + 1;
                     let mut count = 0;
@@ -130,7 +151,7 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
                     while b > U160::ZERO {
                         let (q, r) = b.div_rem(&b900);
                         b = q;
-                        out[i + nb - count - 1] = r.to_u16().ok_or(())?;
+                        out[i + nb - count - 1] = r.to_u16().expect("remainder is always <900");
                         count += 1;
                     }
 
@@ -146,7 +167,36 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
                 if mode == 3 { push!(out, i, right, 29; mode = 0) };
                 push!(out, i, right, 26; k = k + 1);
             },
-            _ => unreachable!()
+            c => {
+                if let Some(p) = MIXED_CHAR_SET.iter().position(|&r| r == c) {
+                    match mode {
+                        0 | 1 => push!(out, i, right, 28; mode = 2),
+                        2 => (),
+                        /* no switch if the char is also present in the punc table */
+                        3 if (p >= 1 && p <= 4) || (p >= 6 && p <= 9)  => (),
+                        3 => push!(out, i, right, 29, 28; mode = 2),
+                        _ => unreachable!("Unknown mode {mode}"),
+                    }
+                    push!(out, i, right, p + 10);
+                } else if let Some(p) = PUNC_CHAR_SET.iter().position(|&r| r == c) {
+                    if mode != 3 {
+                        let mut end = k + 1;
+                        while end < s.len() && end-k < 3 && PUNC_CHAR_SET.contains(&s[end]) {
+                            end += 1;
+                        }
+                        if end-k >= 3 { // latch
+                            if mode != 2 { push!(out, i, right, 28); }
+                            push!(out, i, right, 25; mode = 3);
+                        } else { // shift
+                            push!(out, i, right, 29);
+                        }
+                    }
+                    push!(out, i, right, p);
+                } else { // switch to byte mode
+                    todo!("encode as byte: {c}")
+                }
+                k += 1;
+            },
         };
     }
 
@@ -155,13 +205,8 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> Result<(), ()> {
         i += 1;
     }
 
-    out[0] = i as u16; // length indicator
-    out[i..].fill(900);
-
-    Ok(())
-}
-
-fn encode_bigint() {
+    out[i..].fill(900); // padding
+    return i;
 }
 
 #[derive(Debug, Clone)]
@@ -175,7 +220,7 @@ pub struct PDF417<'a> {
 impl<'a> PDF417<'a> {
     pub const fn new(codewords: &'a [u16], rows: usize, cols: usize, level: u8) -> Self {
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
-        assert!(codewords.len() == rows*cols,
+        assert!(codewords.len() <= rows*cols,
             "codewords will not fit in a the provided configuration");
 
         PDF417 { codewords, rows, cols, level }
@@ -237,54 +282,53 @@ mod tests {
     use super::encode_text;
 
     #[test]
-    fn test_generate_text_simple() {
-        let mut codewords = [0u16; 4];
-        encode_text("Test", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[4, 19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29]);
+    fn test_encode_text_simple() {
+        let mut codewords = [0u16; 3];
+        encode_text("Test", &mut codewords);
+        assert_eq!(&codewords, &[19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29]);
     }
 
     #[test]
-    fn test_generate_text_simple_with_padding() {
-        let mut codewords = [0u16; 6];
-        encode_text("Test", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[4, 19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29, 900, 900]);
+    fn test_encode_text_simple_with_padding() {
+        let mut codewords = [0u16; 5];
+        encode_text("Test", &mut codewords);
+        assert_eq!(&codewords, &[19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29, 900, 900]);
     }
 
     #[test]
     fn test_generate_test_switch_modes() {
-        let mut codewords = [0u16; 7];
-        encode_text("abc1D234", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[7, 27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 28 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4]);
+        let mut codewords = [0u16; 6];
+        encode_text("abc1D234", &mut codewords);
+        assert_eq!(&codewords, &[27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 28 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4]);
     }
 
     #[test]
     fn test_generate_test_numeric() {
-        let mut codewords = [0u16; 12];
-        encode_text("12345678987654321 num", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[12, 902, 190, 232, 499, 20, 504, 721, 900, 26 * 30 + 27, 13 * 30 + 20, 12 * 30 + 29]);
+        let mut codewords = [0u16; 11];
+        encode_text("12345678987654321 num", &mut codewords);
+        assert_eq!(&codewords, &[902, 190, 232, 499, 20, 504, 721, 900, 26 * 30 + 27, 13 * 30 + 20, 12 * 30 + 29]);
     }
 
     #[test]
     fn test_generate_test_numeric_big() {
-        let mut codewords = [0u16; 20];
+        let mut codewords = [0u16; 19];
         //           [                        p1                 ][ p2 ]
-        encode_text("123456789876543211234567898765432112345678987654321", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[20, 902, 491, 81, 137, 725, 651, 455, 511, 858, 135, 138, 488, 568, 447, 553, 198, /* next */ 21, 715, 821]);
+        encode_text("123456789876543211234567898765432112345678987654321", &mut codewords);
+        assert_eq!(&codewords, &[902, 491, 81, 137, 725, 651, 455, 511, 858, 135, 138, 488, 568, 447, 553, 198, /* next */ 21, 715, 821]);
     }
 
     #[test]
     fn test_generate_test_text_with_digits() {
-        let mut codewords = [0u16; 17];
-        encode_text("encoded 0123456789 as digits", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[17, 27 * 30 + 4, 13 * 30 + 2, 14 * 30 + 3, 4 * 30 + 3, 26 * 30 + 28, 0 * 30 + 1, 2 * 30 + 3, 4 * 30 + 5, 6 * 30 + 7, 8 * 30 + 9,
+        let mut codewords = [0u16; 16];
+        encode_text("encoded 0123456789 as digits", &mut codewords);
+        assert_eq!(&codewords, &[27 * 30 + 4, 13 * 30 + 2, 14 * 30 + 3, 4 * 30 + 3, 26 * 30 + 28, 0 * 30 + 1, 2 * 30 + 3, 4 * 30 + 5, 6 * 30 + 7, 8 * 30 + 9,
             26 * 30 + 27, 0 * 30 + 18, 26 * 30 + 3, 8 * 30 + 6, 8 * 30 + 19, 18 * 30 + 29]);
     }
 
-    /*
     #[test]
-    fn test_generate_test_shift() {
-        let mut codewords = [0u16; 7];
-        encode_text("This! Is a quote.", &mut codewords).unwrap();
-        assert_eq!(&codewords, &[7, 27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 27 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4]);
-    }*/
+    fn test_generate_test_punc_mixed() {
+        let mut codewords = [0u16; 17];
+        encode_text("This! Is a `quote (100%)`.", &mut codewords);
+        assert_eq!(&codewords, &[19 * 30 + 27, 7 * 30 + 8, 18 * 30 + 29, 10 * 30 + 26, 27 * 30 + 8, 18 * 30 + 26, 0 * 30 + 26, 29 * 30 + 8, 16 * 30 + 20, 14 * 30 + 19, 4 * 30 + 26, 29 * 30 + 23, 28 * 30 + 1, 0 * 30 + 0, 21 * 30 + 25, 24 * 30 + 8, 17 * 30 + 29]);
+    }
 }
