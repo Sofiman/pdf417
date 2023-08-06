@@ -1,5 +1,10 @@
 use crate::tables::*;
 
+pub const fn ecc_count(level: u8) -> usize {
+    assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
+    1 << (level as usize + 1)
+}
+
 pub fn generate_ecc(codewords: &mut [u16], level: u8) {
     assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
 
@@ -18,6 +23,7 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
 
     assert!(codewords.len() >= factors.len());
     let (data, ecc) = codewords.split_at_mut(codewords.len() - factors.len());
+    ecc.fill(0);
 
     for cw in data {
         let t = (*cw + ecc[0]) % 929;
