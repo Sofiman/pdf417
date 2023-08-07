@@ -26,68 +26,7 @@ const PUNC_CHAR_SET: [u8; 29] = [
 pub const START_PATTERN_LEN: usize = START.len();
 pub const END_PATTERN_LEN: usize = END.len();
 
-macro_rules! append {
-    ($sto:ident, $tb:ident, $i:ident, $bits:expr) => {
-        let b = HL_TO_LL[$tb * 929 + $bits];
-        $sto[$i] = true;
-        $i += 1;
-        let mut mask: u16 = (1 << 15);
-        for _ in 0..16 {
-            $sto[$i] = (b & mask) == mask;
-            mask >>= 1;
-            $i += 1;
-        }
-    }
-}
-
-macro_rules! push {
-    ($cws:ident, $i:ident, $rh:ident, $($cw:expr),+; $post:ident = $new:expr) => {{
-        push!($cws, $i, $rh, $($cw),+);
-        $post = $new;
-    }};
-    ($cws:ident, $i:ident, $rh:ident, $head:expr, $($cw:expr),+) => {
-        push!($cws, $i, $rh, $head);
-        push!($cws, $i, $rh, $($cw),+);
-    };
-    ($cws:ident, $i:ident, $rh:ident, $cw:expr) => {{
-        let cw = $cw as u16;
-        if cw > 29 {
-            if $rh {
-                $cws[$i] = $cws[$i] * 30 + 29;
-                $rh = false;
-                $i += 1;
-            }
-
-            $cws[$i] = cw;
-            $i += 1;
-        } else {
-            if $rh {
-                $cws[$i] = $cws[$i] * 30 + cw;
-                $rh = false;
-                $i += 1;
-            } else {
-                $cws[$i] = cw;
-                $rh = true;
-            }
-        }
-    }}
-}
-
 pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
-    // 2 char = 1 codeword; +1 for length indicator +4 for mode switches
-    let ecc_cw = ecc::ecc_count(level);
-    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 4, "output buffer not large enough");
-
-    // metadata
-    let data_end = out.len() - ecc_cw;
-    out[0] = data_end as u16;
-
-    let data_words = encode_text(s, &mut out[1..data_end]);
-    ecc::generate_ecc(out, level);
-    return data_words + ecc_cw + 1;
-}
-
-pub fn generate_utf8(s: &str, out: &mut [u16], level: u8) -> usize {
     // 6 bytes = 5 codewords; +1 for length indicator + 1 for byte mode +2 for ECI mode
     let ecc_cw = ecc::ecc_count(level);
     let min = (s.len()/6)*5 + (s.len() % 6) + ecc_cw + 1 + 1 + 2;
@@ -146,8 +85,56 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
     return i;
 }
 
-pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
-    assert!(s.is_ascii());
+pub fn generate_ascii(s: &str, out: &mut [u16], level: u8) -> usize {
+    // 2 char = 1 codeword; +1 for length indicator +4 for mode switches
+    // TODO: Relax with the fixed +4 in required capacity
+    let ecc_cw = ecc::ecc_count(level);
+    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 4, "output buffer not large enough");
+
+    // metadata
+    let data_end = out.len() - ecc_cw;
+    out[0] = data_end as u16;
+
+    let data_words = encode_ascii(s, &mut out[1..data_end]);
+    ecc::generate_ecc(out, level);
+    return data_words + ecc_cw + 1;
+}
+
+macro_rules! push {
+    ($cws:ident, $i:ident, $rh:ident, $($cw:expr),+; $post:ident = $new:expr) => {{
+        push!($cws, $i, $rh, $($cw),+);
+        $post = $new;
+    }};
+    ($cws:ident, $i:ident, $rh:ident, $head:expr, $($cw:expr),+) => {
+        push!($cws, $i, $rh, $head);
+        push!($cws, $i, $rh, $($cw),+);
+    };
+    ($cws:ident, $i:ident, $rh:ident, $cw:expr) => {{
+        let cw = $cw as u16;
+        if cw > 29 {
+            if $rh {
+                $cws[$i] = $cws[$i] * 30 + 29;
+                $rh = false;
+                $i += 1;
+            }
+
+            $cws[$i] = cw;
+            $i += 1;
+        } else {
+            if $rh {
+                $cws[$i] = $cws[$i] * 30 + cw;
+                $rh = false;
+                $i += 1;
+            } else {
+                $cws[$i] = cw;
+                $rh = true;
+            }
+        }
+    }}
+}
+
+pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
+    debug_assert!(s.is_ascii());
     let s = s.as_bytes();
 
     let mut mode: u8 = 0; // 0: Upper, 1: Lower, 2: Mixed, 3: Punc, 4: Numeric
@@ -257,6 +244,7 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
                         out[i] = out[i] * 30 + 29;
                         i += 1;
                     }
+                    // TODO: Encode multiple bytes if consecutive instead of one by one
                     i += encode_bytes(&s[k..(k+1)], &mut out[i..(i + 2)]);
                 }
                 k += 1;
@@ -271,6 +259,20 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
 
     out[i..].fill(900); // padding
     return i;
+}
+
+macro_rules! append {
+    ($sto:ident, $tb:ident, $i:ident, $bits:expr) => {
+        let b = HL_TO_LL[$tb * 929 + $bits];
+        $sto[$i] = true;
+        $i += 1;
+        let mut mask: u16 = (1 << 15);
+        for _ in 0..16 {
+            $sto[$i] = (b & mask) == mask;
+            mask >>= 1;
+            $i += 1;
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -343,56 +345,56 @@ impl<'a> PDF417<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_text, encode_bytes};
+    use super::{encode_ascii, encode_bytes};
 
     #[test]
-    fn test_encode_text_simple() {
+    fn test_encode_ascii_simple() {
         let mut codewords = [0u16; 3];
-        encode_text("Test", &mut codewords);
+        encode_ascii("Test", &mut codewords);
         assert_eq!(&codewords, &[19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29]);
     }
 
     #[test]
-    fn test_encode_text_simple_with_padding() {
+    fn test_encode_ascii_simple_with_padding() {
         let mut codewords = [0u16; 5];
-        encode_text("Test", &mut codewords);
+        encode_ascii("Test", &mut codewords);
         assert_eq!(&codewords, &[19 * 30 + 27, 4 * 30 + 18, 19 * 30 + 29, 900, 900]);
     }
 
     #[test]
-    fn test_generate_test_switch_modes() {
+    fn test_generate_ascii_switch_modes() {
         let mut codewords = [0u16; 8];
-        encode_text("abc1D234\x1B", &mut codewords);
+        encode_ascii("abc1D234\x1B", &mut codewords);
         assert_eq!(&codewords, &[27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 28 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4, 913, 0x1B]);
     }
 
     #[test]
-    fn test_generate_test_numeric() {
+    fn test_generate_ascii_numeric() {
         let mut codewords = [0u16; 11];
-        encode_text("12345678987654321 num", &mut codewords);
+        encode_ascii("12345678987654321 num", &mut codewords);
         assert_eq!(&codewords, &[902, 190, 232, 499, 20, 504, 721, 900, 26 * 30 + 27, 13 * 30 + 20, 12 * 30 + 29]);
     }
 
     #[test]
-    fn test_generate_test_numeric_big() {
+    fn test_generate_ascii_numeric_big() {
         let mut codewords = [0u16; 19];
         //           [                        p1                 ][ p2 ]
-        encode_text("123456789876543211234567898765432112345678987654321", &mut codewords);
+        encode_ascii("123456789876543211234567898765432112345678987654321", &mut codewords);
         assert_eq!(&codewords, &[902, 491, 81, 137, 725, 651, 455, 511, 858, 135, 138, 488, 568, 447, 553, 198, /* next */ 21, 715, 821]);
     }
 
     #[test]
-    fn test_generate_test_text_with_digits() {
+    fn test_generate_ascii_with_digits() {
         let mut codewords = [0u16; 16];
-        encode_text("encoded 0123456789 as digits", &mut codewords);
+        encode_ascii("encoded 0123456789 as digits", &mut codewords);
         assert_eq!(&codewords, &[27 * 30 + 4, 13 * 30 + 2, 14 * 30 + 3, 4 * 30 + 3, 26 * 30 + 28, 0 * 30 + 1, 2 * 30 + 3, 4 * 30 + 5, 6 * 30 + 7, 8 * 30 + 9,
             26 * 30 + 27, 0 * 30 + 18, 26 * 30 + 3, 8 * 30 + 6, 8 * 30 + 19, 18 * 30 + 29]);
     }
 
     #[test]
-    fn test_generate_test_punc_mixed() {
+    fn test_generate_ascii_punc_mixed() {
         let mut codewords = [0u16; 17];
-        encode_text("This! Is a `quote (100%)`.", &mut codewords);
+        encode_ascii("This! Is a `quote (100%)`.", &mut codewords);
         assert_eq!(&codewords, &[19 * 30 + 27, 7 * 30 + 8, 18 * 30 + 29, 10 * 30 + 26, 27 * 30 + 8, 18 * 30 + 26, 0 * 30 + 26, 29 * 30 + 8, 16 * 30 + 20, 14 * 30 + 19, 4 * 30 + 26, 29 * 30 + 23, 28 * 30 + 1, 0 * 30 + 0, 21 * 30 + 25, 24 * 30 + 8, 17 * 30 + 29]);
     }
 

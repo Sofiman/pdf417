@@ -12,7 +12,7 @@ const LEVEL: u8 = 1;
 fn main() {
     const S: &str = "Hello from no-std >> rust << !";
     let mut input = [0u16; COLS*ROWS];
-    let data_words = generate_text(S, &mut input, LEVEL);
+    let data_words = generate_ascii(S, &mut input, LEVEL);
     println!("{data_words}/{}", input.len());
 
     let mut storage = [false; ROW_SIZE * ROWS];

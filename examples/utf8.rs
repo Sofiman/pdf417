@@ -12,7 +12,7 @@ const LEVEL: u8 = 1;
 fn main() {
     const S: &str = "💛ワンピース";
     let mut input = [0u16; COLS*ROWS];
-    let data_words = generate_utf8(S, &mut input, LEVEL);
+    let data_words = generate_text(S, &mut input, LEVEL);
     println!("{data_words}/{}", input.len());
 
     let mut storage = [false; ROW_SIZE * ROWS];
