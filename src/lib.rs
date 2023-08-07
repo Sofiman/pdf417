@@ -78,12 +78,30 @@ pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     let ecc_cw = ecc::ecc_count(level);
     assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 4, "output buffer not large enough");
 
-    let data_end = out.len()-ecc_cw;
-    let data_words = encode_text(s, &mut out[1..data_end]);
+    // metadata
+    let data_end = out.len() - ecc_cw;
     out[0] = data_end as u16;
 
+    let data_words = encode_text(s, &mut out[1..data_end]);
     ecc::generate_ecc(out, level);
-    return data_words + ecc_cw;
+    return data_words + ecc_cw + 1;
+}
+
+pub fn generate_utf8(s: &str, out: &mut [u16], level: u8) -> usize {
+    // 6 bytes = 5 codewords; +1 for length indicator + 1 for byte mode +2 for ECI mode
+    let ecc_cw = ecc::ecc_count(level);
+    let min = (s.len()/6)*5 + (s.len() % 6) + ecc_cw + 1 + 1 + 2;
+    assert!(out.len() >= min, "output buffer not large enough to fit {min} codewords");
+
+    // metadata
+    let data_end = out.len() - ecc_cw;
+    out[0] = data_end as u16;
+    out[1] = 927; // ECI identifier for code page
+    out[2] = 26; // UTF-8 is \000026
+
+    let data_words = encode_bytes(s.as_bytes(), &mut out[3..data_end]);
+    ecc::generate_ecc(out, level);
+    return data_words + ecc_cw + 3;
 }
 
 pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
