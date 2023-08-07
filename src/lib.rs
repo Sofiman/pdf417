@@ -86,6 +86,46 @@ pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     return data_words + ecc_cw;
 }
 
+pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
+    let mut i = 0;
+    let mut k = 0;
+
+    if bytes.len() > 1 {
+        // latch to byte mode
+        out[i] = if bytes.len() % 6 == 0 { 924 } else { 901 };
+        i += 1;
+
+        while bytes.len()-k >= 6 {
+            // pack six bytes
+            let mut s: u64 = 0;
+            for n in 0..6 {
+                s = (s << 8) + bytes[k + n] as u64;
+            }
+            // append five codewords
+            for n in 0..5 {
+                let (q, r) = (s / 900, s % 900);
+                out[i + 4 - n] = r as u16;
+                s = q;
+            }
+
+            i += 5;
+            k += 6;
+        }
+    } else {
+        out[i] = 913; // shift to byte mode (only for next codeword)
+        i += 1;
+    }
+
+    // remaining
+    while k < bytes.len() {
+        out[i] = bytes[k] as u16;
+        k += 1;
+        i += 1;
+    }
+
+    return i;
+}
+
 pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
     assert!(s.is_ascii());
     let s = s.as_bytes();
@@ -193,7 +233,11 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
                     }
                     push!(out, i, right, p);
                 } else { // switch to byte mode
-                    todo!("encode as byte: {c}")
+                    if right {
+                        out[i] = out[i] * 30 + 29;
+                        i += 1;
+                    }
+                    i += encode_bytes(&s[k..(k+1)], &mut out[i..]);
                 }
                 k += 1;
             },
@@ -279,7 +323,7 @@ impl<'a> PDF417<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::encode_text;
+    use super::{encode_text, encode_bytes};
 
     #[test]
     fn test_encode_text_simple() {
@@ -297,9 +341,9 @@ mod tests {
 
     #[test]
     fn test_generate_test_switch_modes() {
-        let mut codewords = [0u16; 6];
-        encode_text("abc1D234", &mut codewords);
-        assert_eq!(&codewords, &[27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 28 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4]);
+        let mut codewords = [0u16; 8];
+        encode_text("abc1D234\x1B", &mut codewords);
+        assert_eq!(&codewords, &[27 * 30 + 0, 1 * 30 + 2, 28 * 30 + 1, 28 * 30 + 3, 28 * 30 + 2, 3 * 30 + 4, 913, 0x1B]);
     }
 
     #[test]
@@ -330,5 +374,19 @@ mod tests {
         let mut codewords = [0u16; 17];
         encode_text("This! Is a `quote (100%)`.", &mut codewords);
         assert_eq!(&codewords, &[19 * 30 + 27, 7 * 30 + 8, 18 * 30 + 29, 10 * 30 + 26, 27 * 30 + 8, 18 * 30 + 26, 0 * 30 + 26, 29 * 30 + 8, 16 * 30 + 20, 14 * 30 + 19, 4 * 30 + 26, 29 * 30 + 23, 28 * 30 + 1, 0 * 30 + 0, 21 * 30 + 25, 24 * 30 + 8, 17 * 30 + 29]);
+    }
+
+    #[test]
+    fn test_encode_bytes_multiple() {
+        let mut codewords = [0u16; 6];
+        encode_bytes(b"alcool", &mut codewords);
+        assert_eq!(&codewords, &[924, 163, 238, 432, 766, 244]);
+    }
+
+    #[test]
+    fn test_encode_bytes_not_multiple() {
+        let mut codewords = [0u16; 10];
+        encode_bytes(b"encode bin", &mut codewords);
+        assert_eq!(&codewords, &[901, 169, 883, 224, 680, 517, 32, 98, 105, 110]);
     }
 }
