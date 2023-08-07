@@ -16,7 +16,7 @@ fn main() {
     println!("{data_words}/{}", input.len());
 
     let mut storage = [false; ROW_SIZE * ROWS];
-    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL);
+    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL, false);
     pdf417.render(&mut storage);
 
     let mut col = 0;

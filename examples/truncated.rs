@@ -5,21 +5,18 @@ const BLACK: &str = "\x1B[38;2;0;0;0m█";
 
 const PADDING: usize = 4;
 const COLS: usize = 3;
-const ROWS: usize = 4;
-const ROW_SIZE: usize = (COLS + 2) * 17 + START_PATTERN_LEN + END_PATTERN_LEN;
-const LEVEL: u8 = 0;
-
-const INPUT: [u16; 12] = [10, 900, 7 * 30 + 4, 11 * 30 + 11, 14 * 30 + 26, 22 * 30 + 14, 17 * 30 + 11, 3 * 30 + 29, 10 * 30 + 29, 900, 0, 0]; // HELLO WORLD!
-//const INPUT: [u16; 6] = [4, 900, 7 * 30 + 7, 7 * 30 + 7, 0, 0]; // HELLO WORLD!
-//const INPUT: [u16; 6] = [4, 900, 19 * 30 + 4, 18 * 30 + 19, 0, 0]; // TEST
-//const INPUT: [u16; 20] = [16, 902, 1, 278, 827, 900, 295, 902, 2, 326, 823, 544, 900, 149, 900, 900, 0, 0, 0, 0];
+const ROWS: usize = 6;
+const ROW_SIZE: usize = (COLS + 1) * 17 + START_PATTERN_LEN + 1;
+const LEVEL: u8 = 1;
 
 fn main() {
-    let mut input = INPUT.clone();
-    ecc::generate_ecc(&mut input, LEVEL);
+    const S: &str = "Truncated PDF417";
+    let mut input = [0u16; COLS*ROWS];
+    let data_words = generate_ascii(S, &mut input, LEVEL);
+    println!("{data_words}/{}", input.len());
 
     let mut storage = [false; ROW_SIZE * ROWS];
-    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL, false);
+    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL, true);
     pdf417.render(&mut storage);
 
     let mut col = 0;

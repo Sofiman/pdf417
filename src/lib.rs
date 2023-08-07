@@ -280,16 +280,27 @@ pub struct PDF417<'a> {
     codewords: &'a [u16],
     rows: usize,
     cols: usize,
-    level: u8
+    level: u8,
+
+    /// In a relatively "clean" environment where label damage is unlikely
+    /// (e.g., an office), the right row indicators can be omitted and the stop
+    /// pattern can be reduced to one module width bar.
+    /// This truncation reduces the non-data overhead from 4 codewords per row
+    /// to 2 codewords per row, with a trade-off in decode performance and
+    /// robustness, or the ability to withstand degradation.
+    ///
+    /// This version is called Truncated PDF417, which is fully reader
+    /// compatible with standard PDF41.7.
+    truncated: bool
 }
 
 impl<'a> PDF417<'a> {
-    pub const fn new(codewords: &'a [u16], rows: usize, cols: usize, level: u8) -> Self {
+    pub const fn new(codewords: &'a [u16], rows: usize, cols: usize, level: u8, truncated: bool) -> Self {
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
         assert!(codewords.len() <= rows*cols,
             "codewords will not fit in a the provided configuration");
 
-        PDF417 { codewords, rows, cols, level }
+        PDF417 { codewords, rows, cols, level, truncated }
     }
 
     pub fn render(&self, storage: &mut [bool]) {
@@ -322,18 +333,24 @@ impl<'a> PDF417<'a> {
             col += 1;
 
             if col == self.cols {
-                // row right codeword
-                let cw = match table {
-                    0 => cols_val,
-                    1 => rows_val,
-                    2 => level_val,
-                    _ => unreachable!()
-                };
-                append!(storage, table, i, (row / 3) * 30 + cw);
+                if self.truncated {
+                    // stop pattern reduced to one module width bar
+                    storage[i] = true;
+                    i += 1;
+                } else {
+                    // row right codeword
+                    let cw = match table {
+                        0 => cols_val,
+                        1 => rows_val,
+                        2 => level_val,
+                        _ => unreachable!()
+                    };
+                    append!(storage, table, i, (row / 3) * 30 + cw);
 
-                // row end pattern
-                storage[i..i+END.len()].copy_from_slice(&END);
-                i += END.len();
+                    // row end pattern
+                    storage[i..i+END.len()].copy_from_slice(&END);
+                    i += END.len();
+                }
 
                 col = 0;
                 row += 1;
