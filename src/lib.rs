@@ -123,6 +123,8 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
         i += 1;
     }
 
+    out[i..].fill(900); // padding
+
     return i;
 }
 
@@ -237,7 +239,7 @@ pub fn encode_text(s: &str, out: &mut [u16]) -> usize {
                         out[i] = out[i] * 30 + 29;
                         i += 1;
                     }
-                    i += encode_bytes(&s[k..(k+1)], &mut out[i..]);
+                    i += encode_bytes(&s[k..(k+1)], &mut out[i..(i + 2)]);
                 }
                 k += 1;
             },
