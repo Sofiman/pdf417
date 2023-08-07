@@ -11,8 +11,10 @@ use num_traits::cast::ToPrimitive;
 use num_integer::Integer;
 type U160 = BUintD32::<5>;
 
-const START: [bool; 17] = [true, true, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false];
-const END: [bool; 18] = [true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, true];
+const START: u32 = 0b11111111010101000;
+const   END: u32 = 0b111111101000101001;
+pub const START_PATTERN_LEN: u8 = 17;
+pub const END_PATTERN_LEN: u8 = 18;
 
 const MIXED_CHAR_SET: [u8; 15] = [
     b'&', b'\r', b'\t', b',', b':', b'#', b'-', b'.', b'$', b'/', b'+', b'%', b'*', b'=', b'^'
@@ -22,9 +24,6 @@ const PUNC_CHAR_SET: [u8; 29] = [
     b',', b':', b'\n', b'-', b'.', b'$', b'/', b'"', b'|', b'*', b'(', b')', b'?',
     b'{', b'}', b'\''
 ];
-
-pub const START_PATTERN_LEN: usize = START.len();
-pub const END_PATTERN_LEN: usize = END.len();
 
 pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     // 6 bytes = 5 codewords; +1 for length indicator + 1 for byte mode +2 for ECI mode
@@ -261,25 +260,38 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
     return i;
 }
 
-macro_rules! append {
-    ($sto:ident, $tb:ident, $i:ident, $bits:expr) => {
-        let b = HL_TO_LL[$tb * 929 + $bits];
-        $sto[$i] = true;
-        $i += 1;
-        let mut mask: u16 = (1 << 15);
-        for _ in 0..16 {
-            $sto[$i] = (b & mask) == mask;
+pub trait RenderTarget {
+    type State;
+    fn init_state(&self, config: &PDF417) -> Self::State;
+    fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8);
+}
+
+impl RenderTarget for [bool] {
+    type State = usize;
+
+    fn init_state(&self, _config: &PDF417) -> Self::State {
+        0
+    }
+
+    fn append_bits(&mut self, i: &mut Self::State, value: u32, count: u8) {
+        let mut mask = 1 << (count as u32 - 1);
+        for _ in 0..count {
+            self[*i] = (value & mask) == mask;
             mask >>= 1;
-            $i += 1;
+            *i += 1;
         }
     }
 }
 
+// TODO: RenderTarget for [u8]
+
 #[derive(Debug, Clone)]
 pub struct PDF417<'a> {
     codewords: &'a [u16],
-    rows: usize,
-    cols: usize,
+    /// 3 to 90
+    rows: u32,
+    /// Up to 583 
+    cols: u32,
     level: u8,
 
     /// In a relatively "clean" environment where label damage is unlikely
@@ -294,30 +306,36 @@ pub struct PDF417<'a> {
     truncated: bool
 }
 
+const LEADING_ONE: u32 = 1 << 16;
+macro_rules! cw {
+    ($tb:ident, $val:expr) => {
+        LEADING_ONE + HL_TO_LL[$tb * 929 + $val as usize] as u32
+    }
+}
+
 impl<'a> PDF417<'a> {
-    pub const fn new(codewords: &'a [u16], rows: usize, cols: usize, level: u8, truncated: bool) -> Self {
+    pub const fn new(codewords: &'a [u16], rows: u32, cols: u32, level: u8, truncated: bool) -> Self {
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
-        assert!(codewords.len() <= rows*cols,
+        assert!(codewords.len() <= (rows*cols) as usize,
             "codewords will not fit in a the provided configuration");
 
         PDF417 { codewords, rows, cols, level, truncated }
     }
 
-    pub fn render(&self, storage: &mut [bool]) {
+    pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
         let rows_val = (self.rows - 1) / 3;
         let cols_val = self.cols - 1;
-        let level_val = self.level as usize * 3 + (self.rows - 1) % 3;
+        let level_val = self.level as u32 * 3 + (self.rows - 1) % 3;
 
         let mut table = 0;
-        let mut i = 0;
+        let mut state = storage.init_state(self);
         let mut col = 0;
         let mut row = 0;
 
         for &codeword in self.codewords {
             if col == 0 {
                 // row start pattern
-                storage[i..i+START.len()].copy_from_slice(&START);
-                i += START.len();
+                storage.append_bits(&mut state, START, START_PATTERN_LEN);
 
                 // row left pattern
                 let cw = match table {
@@ -326,17 +344,16 @@ impl<'a> PDF417<'a> {
                     2 => cols_val,
                     _ => unreachable!()
                 };
-                append!(storage, table, i, (row / 3) * 30 + cw);
+                storage.append_bits(&mut state, cw!(table, (row / 3) * 30 + cw), 17);
             }
 
-            append!(storage, table, i, codeword as usize);
+            storage.append_bits(&mut state, cw!(table, codeword), 17);
             col += 1;
 
             if col == self.cols {
                 if self.truncated {
                     // stop pattern reduced to one module width bar
-                    storage[i] = true;
-                    i += 1;
+                    storage.append_bits(&mut state, 1, 1);
                 } else {
                     // row right codeword
                     let cw = match table {
@@ -345,11 +362,9 @@ impl<'a> PDF417<'a> {
                         2 => level_val,
                         _ => unreachable!()
                     };
-                    append!(storage, table, i, (row / 3) * 30 + cw);
-
+                    storage.append_bits(&mut state, cw!(table, (row / 3) * 30 + cw), 17);
                     // row end pattern
-                    storage[i..i+END.len()].copy_from_slice(&END);
-                    i += END.len();
+                    storage.append_bits(&mut state, END, END_PATTERN_LEN);
                 }
 
                 col = 0;

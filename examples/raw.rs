@@ -6,7 +6,7 @@ const BLACK: &str = "\x1B[38;2;0;0;0m█";
 const PADDING: usize = 4;
 const COLS: usize = 3;
 const ROWS: usize = 4;
-const ROW_SIZE: usize = (COLS + 2) * 17 + START_PATTERN_LEN + END_PATTERN_LEN;
+const ROW_SIZE: usize = (COLS + 2) * 17 + START_PATTERN_LEN as usize + END_PATTERN_LEN as usize;
 const LEVEL: u8 = 0;
 
 const INPUT: [u16; 12] = [10, 900, 7 * 30 + 4, 11 * 30 + 11, 14 * 30 + 26, 22 * 30 + 14, 17 * 30 + 11, 3 * 30 + 29, 10 * 30 + 29, 900, 0, 0]; // HELLO WORLD!
@@ -19,8 +19,8 @@ fn main() {
     ecc::generate_ecc(&mut input, LEVEL);
 
     let mut storage = [false; ROW_SIZE * ROWS];
-    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL, false);
-    pdf417.render(&mut storage);
+    let pdf417 = PDF417::new(&input, ROWS as u32, COLS as u32, LEVEL, false);
+    pdf417.render(&mut storage[..]);
 
     let mut col = 0;
     for _ in 0..((PADDING+1)/2) {
