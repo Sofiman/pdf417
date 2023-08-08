@@ -284,6 +284,43 @@ impl RenderTarget for [bool] {
 }
 
 // TODO: RenderTarget for [u8]
+impl RenderTarget for [u8] {
+    type State = (usize, u8);
+
+    fn init_state(&self, _config: &PDF417) -> Self::State {
+        (0, 0)
+    }
+
+    fn append_bits(&mut self, (i, b): &mut Self::State, value: u32, mut count: u8) {
+        if *b > 0 {
+            let remaining = 8 - *b;
+            if count >= remaining {
+                // get upper (b) bits
+                self[*i] |= ((value >> (count - remaining)) & 0xFF) as u8;
+                count -= remaining;
+                *b = 0;
+                *i += 1;
+            } else {
+                self[*i] |= ((value & ((1 << count) - 1)) as u8) << remaining;
+                *b += count;
+                if *b == 8 { *b = 0; }
+                return;
+            }
+        }
+
+        while count >= 8 {
+            // get upper 8 bits
+            self[*i] = ((value >> (count - 8)) & 0xFF) as u8;
+            count -= 8;
+            *i += 1;
+        }
+
+        if count > 0 {
+            self[*i] = ((value & ((1 << count) - 1)) as u8) << (8 - count);
+            *b = count;
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PDF417<'a> {
@@ -377,7 +414,7 @@ impl<'a> PDF417<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_ascii, encode_bytes};
+    use super::{encode_ascii, encode_bytes, RenderTarget, PDF417};
 
     #[test]
     fn test_encode_ascii_simple() {
@@ -442,5 +479,32 @@ mod tests {
         let mut codewords = [0u16; 10];
         encode_bytes(b"encode bin", &mut codewords);
         assert_eq!(&codewords, &[901, 169, 883, 224, 680, 517, 32, 98, 105, 110]);
+    }
+
+    #[test]
+    fn test_append_bits_to_bool_slice() {
+        let pdf417 = PDF417::new(&[0u16; 1], 1, 1, 0, false);
+
+        let mut t = [false; 13];
+        let mut state = t.init_state(&pdf417);
+        t.append_bits(&mut state, 0b110001, 6);
+        t.append_bits(&mut state, 0b11, 2);
+        t.append_bits(&mut state, 0b00111, 5);
+
+        assert_eq!(&t, &[true, true, false, false, false, true, true, true, false, false, true, true, true]);
+    }
+
+    #[test]
+    fn test_append_bits_to_byte_slice() {
+        let pdf417 = PDF417::new(&[0u16; 1], 1, 1, 0, false);
+
+        let mut t = [0u8; 5];
+        let mut state = t.init_state(&pdf417);
+        t.append_bits(&mut state, 0b10101010_10101010_1, 17);
+        t.append_bits(&mut state, 0b1110001_110001, 13);
+        t.append_bits(&mut state, 0b11, 2);
+        t.append_bits(&mut state, 0b0000111, 7);
+
+        assert_eq!(&t, &[0b10101010, 0b10101010, 0b11110001, 0b11000111, 0b00001110]);
     }
 }
