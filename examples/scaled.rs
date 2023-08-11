@@ -7,7 +7,7 @@ const PADDING: usize = 4;
 const COLS: u32 = 2;
 const ROWS: u32 = 5;
 const LEVEL: u8 = 0;
-const SCALE: (u32, u32) = (2, 1);
+const SCALE: (u32, u32) = (2, 2);
 
 const W: usize = pdf417_width!(COLS, SCALE.0, 0) as usize;
 const H: usize = pdf417_height!(ROWS, SCALE.1, 0) as usize;
@@ -18,7 +18,7 @@ fn main() {
     let data_words = generate_ascii(S, &mut input, LEVEL);
     println!("{data_words}/{}", input.len());
 
-    let mut storage = [0u8; (W * H) / 8];
+    let mut storage = [0u8; (W * H) / 8 + 8];
     let pdf417 = PDF417::scaled(&input, ROWS, COLS, LEVEL, SCALE);
     pdf417.render(&mut storage[..]);
 
@@ -29,10 +29,11 @@ fn main() {
     print!("{}", str::repeat(WHITE, PADDING));
     for bits in storage {
         for k in (0..8).rev() {
+            if col + 7 - k == W { break; }
             print!("{}", if (bits & (1 << k)) != 0 { BLACK } else { WHITE });
         }
-        col += 1;
-        if col == W {
+        col += 8;
+        if col >= W {
             col = 0;
             print!("{b}\n{b}", b = str::repeat(WHITE, PADDING));
         }

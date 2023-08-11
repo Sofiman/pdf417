@@ -313,9 +313,38 @@ impl RenderTarget for [bool] {
 }
 
 #[derive(Debug, Default)]
+struct BitShifter {
+    cursor: usize,
+    bit: u8
+}
+
+impl BitShifter {
+    #[inline]
+    pub fn shift(&mut self, storage: &mut [u8], v: bool) {
+        storage[self.cursor] |= (v as u8) << (7 - self.bit);
+        self.bit += 1;
+        if self.bit == 8 {
+            self.cursor += 1;
+            self.bit = 0;
+        }
+    }
+
+    #[inline]
+    pub fn skip(&mut self) {
+        self.cursor += 1;
+        self.bit = 0;
+    }
+
+    #[inline]
+    pub fn move_to(&mut self, cursor: usize) {
+        self.cursor = cursor;
+        self.bit = 0;
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ByteSliceRenderConfig {
-    i: usize,
-    b: u8,
+    bs: BitShifter,
     row_start: usize,
     scale: (u32, u32)
 }
@@ -328,64 +357,36 @@ impl RenderTarget for [u8] {
     }
 
     fn row_start(&mut self, state: &mut Self::State) {
-        state.row_start = state.i;
+        state.row_start = state.bs.cursor;
     }
 
     fn row_end(&mut self, state: &mut Self::State) {
-        if state.b > 0 {
+        if state.bs.bit > 0 {
             // add padding to the last byte of the row
-            state.b = 0;
-            state.i += 1;
+            state.bs.skip();
         }
 
         let h = state.scale.1;
         if h > 1 {
-            let mut i = state.i;
+            let mut i = state.bs.cursor;
             let j = state.row_start;
             let len = i - j;
             for _ in 0..(h - 1) {
                 self.copy_within(j..(j+len), i);
                 i += len;
             }
-            state.i = i;
+            state.bs.move_to(i);
         }
     }
 
     fn append_bits(&mut self, state: &mut Self::State, value: u32, mut count: u8) {
-        let i = &mut state.i;
-        let b = &mut state.b;
         let w = state.scale.0 as usize;
-        if *b > 0 {
-            let remaining = 8 - *b;
-            if count >= remaining {
-                // get upper (b) bits
-                let tail = ((value >> (count - remaining)) & 0xFF) as u8;
-                for _ in 0..w {
-                    self[*i] |= tail;
-                    *i += 1;
-                }
-                count -= remaining;
-                *b = 0;
-            } else { // remaining is at most 7
-                let tail = ((value & ((1 << count) - 1)) as u8) << remaining;
-                for k in 0..w {
-                    self[*i + k] |= tail;
-                }
-                *b = (*b + count) % 8;
-                return;
-            }
-        }
-
-        while count >= 8 {
+        while count > 0 {
             // get upper 8 bits
-            self[(*i)..(*i+w)].fill(((value >> (count - 8)) & 0xFF) as u8);
-            *i += w;
-            count -= 8;
-        }
-
-        if count > 0 {
-            self[(*i)..(*i+w)].fill(((value & ((1 << count) - 1)) as u8) << (8 - count));
-            *b = count;
+            count -= 1;
+            for _ in 0..w {
+                state.bs.shift(self, (value >> count) & 1 == 1);
+            }
         }
     }
 }
@@ -637,5 +638,31 @@ mod tests {
         t.append_bits(&mut state, 0b0000111, 7);
 
         assert_eq!(&t, &[0b10101010, 0b10101010, 0b11110001, 0b11000111, 0b00001110]);
+    }
+
+    #[test]
+    fn test_append_bits_to_bool_slice_scaled() {
+        let mut t = [false; 6 * 3 * 2];
+        let mut state = t.init_state(&PDF417::scaled(&[0u16; 1], 1, 1, 0, (3, 2)));
+        t.row_start(&mut state);
+        t.append_bits(&mut state, 0b110001, 6);
+
+        assert_eq!(&t[..(t.len()/2)], &[true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true], "Testing X scale");
+
+        t.row_end(&mut state);
+        assert_eq!(&t[(t.len()/2)..], &[true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true],"Testing Y scale");
+    }
+
+    #[test]
+    fn test_append_bits_to_byte_slice_scaled() {
+        let mut t = [0u8; (8 * 3 * 2) / 8];
+        let mut state = t.init_state(&PDF417::scaled(&[0u16; 1], 1, 1, 0, (3, 2)));
+        t.row_start(&mut state);
+        t.append_bits(&mut state, 0b01000111, 8);
+
+        assert_eq!(&t[..(t.len()/2)], &[0b00011100, 0b00000001, 0b11111111], "Testing X scale");
+
+        t.row_end(&mut state);
+        assert_eq!(&t[(t.len()/2)..], &[0b00011100, 0b00000001, 0b11111111], "Testing Y scale");
     }
 }
