@@ -6,8 +6,6 @@ pub const fn ecc_count(level: u8) -> usize {
 }
 
 pub fn generate_ecc(codewords: &mut [u16], level: u8) {
-    assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
-
     let factors: &[u16] = match level {
         0 => &ECC_L0,
         1 => &ECC_L1,
@@ -18,10 +16,10 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
         6 => &ECC_L6,
         7 => &ECC_L7,
         8 => &ECC_L8,
-        _ => unreachable!()
+        _ => panic!("ECC level must be between 0 and 8 inclusive")
     };
 
-    assert!(codewords.len() >= factors.len());
+    assert!(codewords.len() >= factors.len(), "ECC codewords could not fit in buffer");
     let (data, ecc) = codewords.split_at_mut(codewords.len() - factors.len());
     ecc.fill(0);
 

@@ -4,22 +4,22 @@ const WHITE: &str = "\x1B[38;2;255;255;255m█";
 const BLACK: &str = "\x1B[38;2;0;0;0m█";
 
 const PADDING: usize = 4;
-const COLS: u32 = 4;
-const ROWS: u32 = 6;
-const LEVEL: u8 = 1;
-const SCALE: (u32, u32) = (1, 1);
+const COLS: u32 = 2;
+const ROWS: u32 = 5;
+const LEVEL: u8 = 0;
+const SCALE: (u32, u32) = (2, 1);
 
-const W: usize = pdf417_width!(COLS, SCALE.0) as usize;
-const H: usize = pdf417_height!(ROWS, SCALE.1) as usize;
+const W: usize = pdf417_width!(COLS, SCALE.0, 0) as usize;
+const H: usize = pdf417_height!(ROWS, SCALE.1, 0) as usize;
 
 fn main() {
-    const S: &str = "💛 ワンピース";
+    const S: &str = "Test";
     let mut input = [0u16; (COLS*ROWS) as usize];
-    let data_words = generate_text(S, &mut input, LEVEL);
+    let data_words = generate_ascii(S, &mut input, LEVEL);
     println!("{data_words}/{}", input.len());
 
-    let mut storage = [false; W * H];
-    let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL);
+    let mut storage = [0u8; (W * H) / 8];
+    let pdf417 = PDF417::scaled(&input, ROWS, COLS, LEVEL, SCALE);
     pdf417.render(&mut storage[..]);
 
     let mut col = 0;
@@ -27,8 +27,10 @@ fn main() {
         println!("{}", str::repeat(WHITE, W + PADDING * 2));
     }
     print!("{}", str::repeat(WHITE, PADDING));
-    for on in storage {
-        print!("{}", if on { BLACK } else { WHITE });
+    for bits in storage {
+        for k in (0..8).rev() {
+            print!("{}", if (bits & (1 << k)) != 0 { BLACK } else { WHITE });
+        }
         col += 1;
         if col == W {
             col = 0;

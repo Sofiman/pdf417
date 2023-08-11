@@ -263,60 +263,128 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
 pub trait RenderTarget {
     type State;
     fn init_state(&self, config: &PDF417) -> Self::State;
+
+    fn row_start(&mut self, state: &mut Self::State);
+    fn row_end(&mut self, state: &mut Self::State);
     fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8);
 }
 
-impl RenderTarget for [bool] {
-    type State = usize;
+#[derive(Debug, Default)]
+pub struct BoolSliceRenderConfig {
+    i: usize,
+    row_start: usize,
+    scale: (u32, u32)
+}
 
-    fn init_state(&self, _config: &PDF417) -> Self::State {
-        0
+impl RenderTarget for [bool] {
+    type State = BoolSliceRenderConfig;
+
+    fn init_state(&self, config: &PDF417) -> Self::State {
+        BoolSliceRenderConfig { scale: config.scale, ..Default::default() }
     }
 
-    fn append_bits(&mut self, i: &mut Self::State, value: u32, count: u8) {
+    fn row_start(&mut self, state: &mut Self::State) {
+        state.row_start = state.i;
+    }
+
+    fn row_end(&mut self, state: &mut Self::State) {
+        let w = state.scale.1 as usize;
+        if w > 1 {
+            let mut i = state.i;
+            let len = state.i - state.row_start;
+            for _ in 0..(w - 1) {
+                self.copy_within((state.row_start)..(state.row_start+len), i);
+                i += len;
+            }
+            state.i = i;
+        }
+    }
+
+    fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8) {
+        let w = state.scale.0 as usize;
+        let i = &mut state.i;
         let mut mask = 1 << (count as u32 - 1);
         for _ in 0..count {
-            self[*i] = (value & mask) == mask;
+            self[(*i)..(*i + w)].fill((value & mask) == mask);
+            *i += w;
             mask >>= 1;
-            *i += 1;
         }
     }
 }
 
-// TODO: RenderTarget for [u8]
-impl RenderTarget for [u8] {
-    type State = (usize, u8);
+#[derive(Debug, Default)]
+pub struct ByteSliceRenderConfig {
+    i: usize,
+    b: u8,
+    row_start: usize,
+    scale: (u32, u32)
+}
 
-    fn init_state(&self, _config: &PDF417) -> Self::State {
-        (0, 0)
+impl RenderTarget for [u8] {
+    type State = ByteSliceRenderConfig;
+
+    fn init_state(&self, config: &PDF417) -> Self::State {
+        ByteSliceRenderConfig { scale: config.scale, ..Default::default() }
     }
 
-    fn append_bits(&mut self, (i, b): &mut Self::State, value: u32, mut count: u8) {
+    fn row_start(&mut self, state: &mut Self::State) {
+        state.row_start = state.i;
+    }
+
+    fn row_end(&mut self, state: &mut Self::State) {
+        if state.b > 0 {
+            // add padding to the last byte of the row
+            state.b = 0;
+            state.i += 1;
+        }
+
+        let h = state.scale.1;
+        if h > 1 {
+            let mut i = state.i;
+            let j = state.row_start;
+            let len = i - j;
+            for _ in 0..(h - 1) {
+                self.copy_within(j..(j+len), i);
+                i += len;
+            }
+            state.i = i;
+        }
+    }
+
+    fn append_bits(&mut self, state: &mut Self::State, value: u32, mut count: u8) {
+        let i = &mut state.i;
+        let b = &mut state.b;
+        let w = state.scale.0 as usize;
         if *b > 0 {
             let remaining = 8 - *b;
             if count >= remaining {
                 // get upper (b) bits
-                self[*i] |= ((value >> (count - remaining)) & 0xFF) as u8;
+                let tail = ((value >> (count - remaining)) & 0xFF) as u8;
+                for _ in 0..w {
+                    self[*i] |= tail;
+                    *i += 1;
+                }
                 count -= remaining;
                 *b = 0;
-                *i += 1;
-            } else {
-                self[*i] |= ((value & ((1 << count) - 1)) as u8) << remaining;
-                *b += count;
-                if *b == 8 { *b = 0; }
+            } else { // remaining is at most 7
+                let tail = ((value & ((1 << count) - 1)) as u8) << remaining;
+                for k in 0..w {
+                    self[*i + k] |= tail;
+                }
+                *b = (*b + count) % 8;
                 return;
             }
         }
 
         while count >= 8 {
             // get upper 8 bits
-            self[*i] = ((value >> (count - 8)) & 0xFF) as u8;
+            self[(*i)..(*i+w)].fill(((value >> (count - 8)) & 0xFF) as u8);
+            *i += w;
             count -= 8;
-            *i += 1;
         }
 
         if count > 0 {
-            self[*i] = ((value & ((1 << count) - 1)) as u8) << (8 - count);
+            self[(*i)..(*i+w)].fill(((value & ((1 << count) - 1)) as u8) << (8 - count));
             *b = count;
         }
     }
@@ -330,6 +398,7 @@ pub struct PDF417<'a> {
     /// Up to 583 
     cols: u32,
     level: u8,
+    scale: (u32, u32),
 
     /// In a relatively "clean" environment where label damage is unlikely
     /// (e.g., an office), the right row indicators can be omitted and the stop
@@ -384,12 +453,41 @@ macro_rules! pdf417_height {
 }
 
 impl<'a> PDF417<'a> {
-    pub const fn new(codewords: &'a [u16], rows: u32, cols: u32, level: u8, truncated: bool) -> Self {
+    pub const fn new(codewords: &'a [u16], rows: u32, cols: u32, level: u8) -> Self {
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
         assert!(codewords.len() <= (rows*cols) as usize,
             "codewords will not fit in a the provided configuration");
 
-        PDF417 { codewords, rows, cols, level, truncated }
+        PDF417 { codewords, rows, cols, level, truncated: false, scale: (1, 1) }
+    }
+
+    pub const fn scaled(codewords: &'a [u16], rows: u32, cols: u32, level: u8, scale: (u32, u32)) -> Self {
+        assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
+        assert!(codewords.len() <= (rows*cols) as usize,
+            "codewords will not fit in a the provided configuration");
+        assert!(scale.0 > 0 && scale.1 > 0);
+
+        PDF417 { codewords, rows, cols, level, scale, truncated: false }
+    }
+
+    pub const fn is_truncated(&self) -> bool {
+        self.truncated
+    }
+
+    pub const fn truncated(self, truncated: bool) -> Self {
+        Self { truncated, ..self }
+    }
+
+    pub const fn rows(&self) -> u32 {
+        self.rows
+    }
+
+    pub const fn cols(&self) -> u32 {
+        self.cols
+    }
+
+    pub const fn scale(&self) -> (u32, u32) {
+        self.scale
     }
 
     pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
@@ -404,6 +502,8 @@ impl<'a> PDF417<'a> {
 
         for &codeword in self.codewords {
             if col == 0 {
+                storage.row_start(&mut state);
+
                 // row start pattern
                 storage.append_bits(&mut state, START, START_PATTERN_LEN);
 
@@ -433,9 +533,11 @@ impl<'a> PDF417<'a> {
                         _ => unreachable!()
                     };
                     storage.append_bits(&mut state, cw!(table, (row / 3) * 30 + cw), 17);
-                    // row end pattern
+
                     storage.append_bits(&mut state, END, END_PATTERN_LEN);
                 }
+
+                storage.row_end(&mut state);
 
                 col = 0;
                 row += 1;
@@ -516,10 +618,8 @@ mod tests {
 
     #[test]
     fn test_append_bits_to_bool_slice() {
-        let pdf417 = PDF417::new(&[0u16; 1], 1, 1, 0, false);
-
         let mut t = [false; 13];
-        let mut state = t.init_state(&pdf417);
+        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 1, 1, 0));
         t.append_bits(&mut state, 0b110001, 6);
         t.append_bits(&mut state, 0b11, 2);
         t.append_bits(&mut state, 0b00111, 5);
@@ -529,10 +629,8 @@ mod tests {
 
     #[test]
     fn test_append_bits_to_byte_slice() {
-        let pdf417 = PDF417::new(&[0u16; 1], 1, 1, 0, false);
-
         let mut t = [0u8; 5];
-        let mut state = t.init_state(&pdf417);
+        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 1, 1, 0));
         t.append_bits(&mut state, 0b10101010_10101010_1, 17);
         t.append_bits(&mut state, 0b1110001_110001, 13);
         t.append_bits(&mut state, 0b11, 2);
