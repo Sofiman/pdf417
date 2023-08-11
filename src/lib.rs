@@ -350,6 +350,39 @@ macro_rules! cw {
     }
 }
 
+#[macro_export]
+macro_rules! pdf417_width {
+    ($cols:expr) => {
+        pdf417_width!($cols, 1);
+    };
+    ($cols:expr, $scale_x:expr) => {
+        pdf417_width!($cols, $scale_x, 0);
+    };
+    ($cols:expr, $scale_x:expr, $pad:expr) => {
+        pdf417_width!($cols, $scale_x, $pad, false);
+    };
+    ($cols:expr, $scale_x:expr, $pad:expr, $truncated:expr) => {
+        if $truncated {
+            (17 + 17 + $cols * 17) * $scale_x + $pad
+        } else {
+            (17 + 17 + $cols * 17 + 17 + 18) * $scale_x + $pad
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! pdf417_height {
+    ($rows:expr) => {
+        pdf417_height!($rows, 1);
+    };
+    ($rows:expr, $scale_y:expr) => {
+        pdf417_height!($rows, $scale_y, 0);
+    };
+    ($rows:expr, $scale_y:expr, $pad:expr) => {
+        $rows * $scale_y + $pad
+    };
+}
+
 impl<'a> PDF417<'a> {
     pub const fn new(codewords: &'a [u16], rows: u32, cols: u32, level: u8, truncated: bool) -> Self {
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
