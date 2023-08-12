@@ -1,9 +1,7 @@
 use crate::ecc;
 
-use bnum::BUintD32;
-use num_traits::cast::ToPrimitive;
-use num_integer::Integer;
-type U160 = BUintD32::<5>;
+use awint_core::{InlAwi, Bits};
+type U160 = awint_macros::inlawi_ty!(160);
 
 const MIXED_CHAR_SET: [u8; 15] = [
     b'&', b'\r', b'\t', b',', b':', b'#', b'-', b'.', b'$', b'/', b'+', b'%', b'*', b'=', b'^'
@@ -176,17 +174,29 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                 } else {
                     if mode != 4 { push!(out, i, right, 902; mode = 4); }
 
-                    let b900 = U160::from(900u16);
-                    let mut b = U160::from_str_radix(core::str::from_utf8(&s[k..end]).expect("only ascii"), 10)
-                        .expect("44 digits base 10 should fit in 160 bits");
-                    b += U160::from(10u16).pow((end-k) as u32);
+                    let mut b = U160::zero();
+                    {
+                        let mut p0 = U160::zero();
+                        let mut p1 = U160::zero();
+                        b.bytes_radix_(None, &s[k..end], 10, &mut p0, &mut p1)
+                            .expect("45 digits base 10 should fit in 160 bits");
+
+                        // Power of 10 (see https://stackoverflow.com/a/44103598)
+                        p1.usize_(1);
+                        p1.shl_(end-k).unwrap();
+                        for _ in 0..(end-k) {
+                            p0.copy_(&p1).unwrap();
+                            p0.shl_(2).unwrap();
+                            p1.add_(&p0).unwrap();
+                        }
+                        b.add_(&p1).unwrap();
+                    }
                     let nb = (end-k) / 3 + 1;
                     let mut count = 0;
 
-                    while b > U160::ZERO {
-                        let (q, r) = b.div_rem(&b900);
-                        b = q;
-                        out[i + nb - count - 1] = r.to_u16().expect("remainder is always <900");
+                    while !b.is_zero() {
+                        let r = b.digit_udivide_inplace_(900).expect("900 > 0");
+                        out[i + nb - count - 1] = r as u16;
                         count += 1;
                     }
 

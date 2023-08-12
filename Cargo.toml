@@ -12,6 +12,5 @@ keywords = ["pdf417", "no-std", "embedded"]
 categories = ["encoding", "embedded", "no-std"]
 
 [dependencies]
-bnum = { version = "0.8.0", default-features = false, features = ["numtraits"] }
-num-integer = { version = "0.1.45", default-features = false }
-num-traits = { version = "0.2.16", default-features = false }
+awint_core = { version = "0.11.0", default-features = false }
+awint_macros = { version = "0.11.0", default-features = false }
