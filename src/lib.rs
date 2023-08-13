@@ -25,17 +25,34 @@ pub const MIN_COLS: u8 = 1;
 /// Maximum number of data columns in a PDF417 barcode.
 pub const MAX_COLS: u8 = 30;
 
+/// A receiver for rendering PDF417 barcodes.
 pub trait RenderTarget {
+    /// User defined type for storing the progress of the rendering and various
+    /// configuration values.
     type State;
+
+    /// Called at the beginning of the rendering of an PDF417 passed by
+    /// reference. You can store any state you want which you will be able to
+    /// use later in the next functions.
     fn init_state(&self, config: &PDF417) -> Self::State;
 
+    /// Called at the beginning of a row (before the start pattern and left
+    /// codeword are appended).
     fn row_start(&mut self, state: &mut Self::State);
+
+    /// Called at the e,d of a row (after the right codeword and end
+    /// pattern are appended).
     fn row_end(&mut self, state: &mut Self::State);
+
+    /// Append the `count` least significant bits stored in `value`. The `count`
+    /// is guaranteed to be less or equal than 32.
     fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8);
 }
 
 #[derive(Debug, Default)]
 /// Struct used to implement RenderTarget for \[bool\]
+///
+/// This allows passing an \[bool\] to [PDF417::render].
 pub struct BoolSliceRenderConfig {
     i: usize,
     row_start: usize,
@@ -109,7 +126,9 @@ impl BitShifter {
 }
 
 #[derive(Debug, Default)]
-/// Struct used to implement RenderTarget for \[u8\]
+/// Struct used to implement RenderTarget for \[u8\].
+///
+/// This allows passing an \[u8\] to [PDF417::render].
 pub struct ByteSliceRenderConfig {
     bs: BitShifter,
     row_start: usize,
