@@ -1,3 +1,5 @@
+//! User data to high level encoding conversion functions
+
 use crate::ecc;
 
 use awint_core::{InlAwi, Bits};
@@ -12,44 +14,54 @@ const PUNC_CHAR_SET: [u8; 29] = [
     b'{', b'}', b'\''
 ];
 
-pub fn encode_num(mut n: usize, out: &mut [u16]) -> usize {
+/// Encode a 64-bit unsigned integer `n` to the `out` codewords slice for later
+/// rendering to a PDF417. This function returns the number of codewords
+/// written. Please note that the remaining codeword slots are filled with the
+/// padding codeword (900).
+pub fn encode_num(mut n: u64, out: &mut [u16]) -> usize {
     out[0] = 902;
 
     let mut digits = 0;
-    let mut b = U160::zero();
-    b.usize_(n);
 
     // Append a leading 1 to the number to do the base 900
     // conversion. We need to calculate and add 10^(digits).
     // Power of 10 (see https://stackoverflow.com/a/44103598)
     {
-        let mut p0 = U160::zero();
-        let mut p1 = U160::uone();
+        let mut val = n;
+        let mut p1 = 1;
 
-        // Power of 10 (see https://stackoverflow.com/a/44103598)
-        while n > 0 {
-            p0.copy_(&p1).unwrap();
-            p0.shl_(2).unwrap();
-            p1.add_(&p0).unwrap();
-            n /= 10;
+        while val > 0 {
+            p1 += p1 << 2; // *5
+            val /= 10;
             digits += 1;
         }
-        p1.shl_(digits).unwrap();
-        b.add_(&p1).unwrap();
+        p1 <<= digits;
+        n += p1;
     }
 
     let nb = digits / 3 + 1;
     let mut count = 0;
 
-    while !b.is_zero() {
-        let r = b.digit_udivide_inplace_(900).expect("900 > 0");
+    while n > 0 {
+        let (q, r) = (n / 900, n % 900);
+        n = q;
         out[1 + nb - count - 1] = r as u16;
         count += 1;
     }
 
+    out[(1 + nb)..].fill(900); // padding
+
     1 + nb
 }
 
+/// Generates the required codewords to store an __UTF-8__ string `s` to the `out`
+/// codewords slice ready to be rendered to a PDF417. __Note that the conversion
+/// is space inefficient, is the string is composed of ASCII characters, please
+/// consider using [generate_ascii] instead.__ Generated codewords include
+/// metadata codewords such as ECC codewords, which count is determined by
+/// `level` (0 to 8). The free codewords slots are filled by padding codeword
+/// (900). This function returns the total number of codewords written to the
+/// `out` slice excluding padding.
 pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     // 6 bytes = 5 codewords; +1 for length indicator + 1 for byte mode +2 for ECI mode
     let ecc_cw = ecc::ecc_count(level);
@@ -67,6 +79,10 @@ pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     return data_words + ecc_cw + 3;
 }
 
+/// Encodes the `bytes` byte slice to the `out` codewords slice for later
+/// rendering to a PDF417. This function returns the number of codewords
+/// written. Please note that the remaining codeword slots are filled with the
+/// padding codeword (900).
 pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
     let mut i = 0;
     let mut k = 0;
@@ -109,6 +125,12 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
     return i;
 }
 
+/// Generates the required codewords to store the __ASCII__ string `s` to the
+/// `out` codewords slice ready to be rendered to a PDF417. Generated codewords
+/// include metadata codewords such as ECC codewords, which count is determined
+/// by `level` (0 to 8). The free codewords slots are filled by padding codeword
+/// (900). This function returns the total number of codewords written to the
+/// `out` slice excluding padding.
 pub fn generate_ascii(s: &str, out: &mut [u16], level: u8) -> usize {
     // 2 char = 1 codeword; +1 for length indicator +4 for mode switches
     // TODO: Relax with the fixed +4 in required capacity
@@ -157,6 +179,13 @@ macro_rules! push {
     }}
 }
 
+/// Encode the ASCII string to the `out` codewords slice for later rendering to
+/// a PDF417. *Warning*: This function uses the PDF417 table based encoding to
+/// reduce the size of the text. If you want to encode an UTF-8 string, use
+/// [generate_text] instead.
+///
+/// This function returns the number of codewords written. Please note that the
+/// remaining codeword slots are filled with the padding codeword (900).
 pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
     debug_assert!(s.is_ascii());
     let s = s.as_bytes();
@@ -342,9 +371,9 @@ mod tests {
 
     #[test]
     fn test_encode_num() {
-        let mut codewords = [0u16; 4];
-        encode_num(7654321, &mut codewords);
-        assert_eq!(&codewords, &[902, 21, 715, 821]);
+        let mut codewords = [0u16; 7];
+        encode_num(12345678987654321, &mut codewords);
+        assert_eq!(&codewords, &[902, 190, 232, 499, 20, 504, 721]);
     }
 
     #[test]
