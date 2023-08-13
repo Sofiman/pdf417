@@ -12,6 +12,44 @@ const PUNC_CHAR_SET: [u8; 29] = [
     b'{', b'}', b'\''
 ];
 
+pub fn encode_num(mut n: usize, out: &mut [u16]) -> usize {
+    out[0] = 902;
+
+    let mut digits = 0;
+    let mut b = U160::zero();
+    b.usize_(n);
+
+    // Append a leading 1 to the number to do the base 900
+    // conversion. We need to calculate and add 10^(digits).
+    // Power of 10 (see https://stackoverflow.com/a/44103598)
+    {
+        let mut p0 = U160::zero();
+        let mut p1 = U160::uone();
+
+        // Power of 10 (see https://stackoverflow.com/a/44103598)
+        while n > 0 {
+            p0.copy_(&p1).unwrap();
+            p0.shl_(2).unwrap();
+            p1.add_(&p0).unwrap();
+            n /= 10;
+            digits += 1;
+        }
+        p1.shl_(digits).unwrap();
+        b.add_(&p1).unwrap();
+    }
+
+    let nb = digits / 3 + 1;
+    let mut count = 0;
+
+    while !b.is_zero() {
+        let r = b.digit_udivide_inplace_(900).expect("900 > 0");
+        out[1 + nb - count - 1] = r as u16;
+        count += 1;
+    }
+
+    1 + nb
+}
+
 pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
     // 6 bytes = 5 codewords; +1 for length indicator + 1 for byte mode +2 for ECI mode
     let ecc_cw = ecc::ecc_count(level);
@@ -160,8 +198,9 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                 while end < s.len() && end-k < 44 && (b'0'..=b'9').contains(&s[end]) {
                     end += 1;
                 }
+                let digits = end - k;
 
-                if end-k <= 13 && mode != 4 {
+                if digits <= 13 && mode != 4 {
                     match mode {
                         0 | 1 => push!(out, i, right, 28; mode = 2),
                         2 => (),
@@ -181,17 +220,19 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                         b.bytes_radix_(None, &s[k..end], 10, &mut p0, &mut p1)
                             .expect("45 digits base 10 should fit in 160 bits");
 
+                        // Append a leading 1 to the number to do the base 900
+                        // conversion. We need to calculate and add 10^(digits).
                         // Power of 10 (see https://stackoverflow.com/a/44103598)
-                        p1.usize_(1);
-                        p1.shl_(end-k).unwrap();
-                        for _ in 0..(end-k) {
+                        p1.uone_();
+                        p1.shl_(digits).unwrap();
+                        for _ in 0..digits {
                             p0.copy_(&p1).unwrap();
                             p0.shl_(2).unwrap();
                             p1.add_(&p0).unwrap();
                         }
                         b.add_(&p1).unwrap();
                     }
-                    let nb = (end-k) / 3 + 1;
+                    let nb = digits / 3 + 1;
                     let mut count = 0;
 
                     while !b.is_zero() {
@@ -261,7 +302,7 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_ascii, encode_bytes};
+    use super::{encode_ascii, encode_bytes, encode_num};
 
     #[test]
     fn test_encode_ascii_simple() {
@@ -297,6 +338,13 @@ mod tests {
         //           [                        p1                 ][ p2 ]
         encode_ascii("123456789876543211234567898765432112345678987654321", &mut codewords);
         assert_eq!(&codewords, &[902, 491, 81, 137, 725, 651, 455, 511, 858, 135, 138, 488, 568, 447, 553, 198, /* next */ 21, 715, 821]);
+    }
+
+    #[test]
+    fn test_encode_num() {
+        let mut codewords = [0u16; 4];
+        encode_num(7654321, &mut codewords);
+        assert_eq!(&codewords, &[902, 21, 715, 821]);
     }
 
     #[test]
