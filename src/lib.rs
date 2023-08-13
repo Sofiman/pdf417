@@ -218,9 +218,9 @@ macro_rules! pdf417_width {
     };
     ($cols:expr, $scale_x:expr, $truncated:expr) => {
         if $truncated {
-            (START_PATTERN_LEN + 17 + $cols * 17 + 1) * $scale_x
+            (START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 1) * $scale_x as usize
         } else {
-            (START_PATTERN_LEN + 17 + $cols * 17 + 17 + END_PATTERN_LEN) * $scale_x
+            (START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 17 + END_PATTERN_LEN as usize) * $scale_x as usize
         }
     };
 }
