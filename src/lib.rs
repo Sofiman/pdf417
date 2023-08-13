@@ -1,3 +1,8 @@
+//! # PDF417 Generator
+//!
+//! This crate implements a customizable PDF417 barcode generator that is
+//! suitable for both std and no-std (no alloc) applications.
+
 #![no_std]
 #![feature(const_mut_refs)]
 
@@ -202,51 +207,48 @@ macro_rules! cw {
 
 #[macro_export]
 /// Calculate the width in pixels of a PDF417 barcode according to the
-/// configuration (Columns, X scale, Padding, Is Truncated). Only the number of
-/// columns is required, other parameters can be omitted in order.
+/// configuration (Columns, X scale, Is Truncated). Only the number of columns
+/// is required, other parameters can be omitted in order.
 macro_rules! pdf417_width {
     ($cols:expr) => {
         pdf417_width!($cols, 1);
     };
     ($cols:expr, $scale_x:expr) => {
-        pdf417_width!($cols, $scale_x, 0);
+        pdf417_width!($cols, $scale_x, false);
     };
-    ($cols:expr, $scale_x:expr, $pad:expr) => {
-        pdf417_width!($cols, $scale_x, $pad, false);
-    };
-    ($cols:expr, $scale_x:expr, $pad:expr, $truncated:expr) => {
+    ($cols:expr, $scale_x:expr, $truncated:expr) => {
         if $truncated {
-            (17 + 17 + $cols * 17) * $scale_x + $pad
+            (START_PATTERN_LEN + 17 + $cols * 17 + 1) * $scale_x
         } else {
-            (17 + 17 + $cols * 17 + 17 + 18) * $scale_x + $pad
+            (START_PATTERN_LEN + 17 + $cols * 17 + 17 + END_PATTERN_LEN) * $scale_x
         }
     };
 }
 
 #[macro_export]
 /// Calculate the height in pixels of a PDF417 barcode according to the
-/// configuration (Rows, Y scale, Padding). Only the number of
-/// rows is required, other parameters can be omitted in order.
+/// configuration (Rows, Y scale). Only the number of rows is required, other
+/// parameters can be omitted in order.
 macro_rules! pdf417_height {
     ($rows:expr) => {
         pdf417_height!($rows, 1);
     };
     ($rows:expr, $scale_y:expr) => {
-        pdf417_height!($rows, $scale_y, 0);
-    };
-    ($rows:expr, $scale_y:expr, $pad:expr) => {
-        $rows * $scale_y + $pad
+        $rows * $scale_y
     };
 }
 
 impl<'a> PDF417<'a> {
     /// Creates a new PDF417 with the user's data section (codewords slice),
-    /// the level of error correction and the layout configuration (rows and cols)
+    /// the level of error correction and the layout configuration
+    /// (rows and cols). The total codewords capacity is calculated with 
+    /// rows \* cols and must be greater or equal to the number of codewords
+    /// in the `codewords` slice.
     pub const fn new(codewords: &'a [u16], rows: u8, cols: u8, level: u8) -> Self {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
         assert!(codewords.len() <= (rows as usize * cols as usize),
-            "codewords will not fit in a the provided configuration");
+            "codewords will not fit in the provided configuration");
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
 
         PDF417 { codewords, rows, cols, level, scale: (1, 1), truncated: false }

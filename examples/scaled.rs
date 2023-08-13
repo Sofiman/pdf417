@@ -9,8 +9,8 @@ const ROWS: u8 = 5;
 const LEVEL: u8 = 0;
 const SCALE: (u32, u32) = (2, 2);
 
-const W: usize = pdf417_width!(COLS as u32, SCALE.0, 0) as usize;
-const H: usize = pdf417_height!(ROWS as u32, SCALE.1, 0) as usize;
+const W: usize = pdf417_width!(COLS as u32, SCALE.0) as usize;
+const H: usize = pdf417_height!(ROWS as u32, SCALE.1) as usize;
 
 fn main() {
     const S: &str = "Test";

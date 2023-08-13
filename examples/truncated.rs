@@ -8,8 +8,8 @@ const COLS: u8 = 3;
 const ROWS: u8 = 6;
 const LEVEL: u8 = 1;
 
-const W: usize = pdf417_width!(COLS as usize, 1, 0, true);
-const H: usize = pdf417_height!(ROWS as usize, 1, 0);
+const W: usize = pdf417_width!(COLS as usize, 1, true);
+const H: usize = pdf417_height!(ROWS as usize, 1);
 
 fn main() {
     const S: &str = "Truncated PDF417";
