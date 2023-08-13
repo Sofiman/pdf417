@@ -27,8 +27,8 @@ pub const MAX_COLS: u8 = 30;
 
 /// A receiver for rendering PDF417 barcodes.
 pub trait RenderTarget {
-    /// User defined type for storing the progress of the rendering and various
-    /// configuration values.
+    /// User defined type for storing the progress of the rendering and/or
+    /// various configuration values.
     type State;
 
     /// Called at the beginning of the rendering of an PDF417 passed by
@@ -40,19 +40,24 @@ pub trait RenderTarget {
     /// codeword are appended).
     fn row_start(&mut self, state: &mut Self::State);
 
-    /// Called at the e,d of a row (after the right codeword and end
+    /// Called at the end of a row (after the right codeword and end
     /// pattern are appended).
     fn row_end(&mut self, state: &mut Self::State);
 
-    /// Append the `count` least significant bits stored in `value`. The `count`
-    /// is guaranteed to be less or equal than 32.
+    /// Append the `count` least significant bits stored in `value` as pixels.
+    /// The `count` is guaranteed to be less or equal than 32. A set bit
+    /// represents a black pixel and a unset bit a white pixel.
     fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8);
 }
 
 #[derive(Debug, Default)]
 /// Struct used to implement RenderTarget for \[bool\]
 ///
-/// This allows passing an \[bool\] to [PDF417::render].
+/// This allows passing an \[bool\] to [PDF417::render]. Please note that
+/// after each row there is some padding zeros at the end of the current byte.
+/// Therefore, when using the slice of bytes to renders you must skip these
+/// bytes by checking if we reached the end of the row and discarding the end of
+/// the byte being rendered.
 pub struct BoolSliceRenderConfig {
     i: usize,
     row_start: usize,
