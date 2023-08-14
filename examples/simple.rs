@@ -7,8 +7,8 @@ const COLS: u8 = 4;
 const ROWS: u8 = 6;
 const LEVEL: u8 = 1;
 
-const W: usize = pdf417_width!(COLS as usize);
-const H: usize = pdf417_height!(ROWS as usize);
+const W: usize = pdf417_width!(COLS);
+const H: usize = pdf417_height!(ROWS);
 
 fn main() {
     const S: &str = "Hello from no-std >> rust << !";

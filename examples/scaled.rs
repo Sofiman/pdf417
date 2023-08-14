@@ -9,8 +9,8 @@ const ROWS: u8 = 5;
 const LEVEL: u8 = 0;
 const SCALE: (u32, u32) = (2, 2);
 
-const W: usize = pdf417_width!(COLS as u32, SCALE.0) as usize;
-const H: usize = pdf417_height!(ROWS as u32, SCALE.1) as usize;
+const W: usize = pdf417_width!(COLS, SCALE.0);
+const H: usize = pdf417_height!(ROWS, SCALE.1);
 
 fn main() {
     const S: &str = "Test";
@@ -18,7 +18,7 @@ fn main() {
     let data_words = generate_ascii(S, &mut input, LEVEL);
     println!("{data_words}/{}", input.len());
 
-    let mut storage = [0u8; (W * H) / 8 + 8];
+    let mut storage = [0u8; (W * H) / 8 + ROWS as usize];
     let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL).scaled(SCALE);
     pdf417.render(&mut storage[..]);
 

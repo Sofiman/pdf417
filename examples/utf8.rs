@@ -9,8 +9,8 @@ const ROWS: u8 = 6;
 const LEVEL: u8 = 1;
 const SCALE: (u32, u32) = (1, 1);
 
-const W: usize = pdf417_width!(COLS as u32, SCALE.0) as usize;
-const H: usize = pdf417_height!(ROWS as u32, SCALE.1) as usize;
+const W: usize = pdf417_width!(COLS, SCALE.0);
+const H: usize = pdf417_height!(ROWS, SCALE.1);
 
 fn main() {
     const S: &str = "💛 ワンピース";

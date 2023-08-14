@@ -13,8 +13,8 @@ const INPUT: [u16; 12] = [10, 900, 7 * 30 + 4, 11 * 30 + 11, 14 * 30 + 26, 22 * 
 //const INPUT: [u16; 6] = [4, 900, 19 * 30 + 4, 18 * 30 + 19, 0, 0]; // TEST
 //const INPUT: [u16; 20] = [16, 902, 1, 278, 827, 900, 295, 902, 2, 326, 823, 544, 900, 149, 900, 900, 0, 0, 0, 0];
 
-const W: usize = pdf417_width!(COLS as usize);
-const H: usize = pdf417_height!(ROWS as usize);
+const W: usize = pdf417_width!(COLS);
+const H: usize = pdf417_height!(ROWS);
 
 fn main() {
     let mut input = INPUT.clone();

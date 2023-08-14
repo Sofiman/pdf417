@@ -132,10 +132,9 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
 /// (900). This function returns the total number of codewords written to the
 /// `out` slice excluding padding.
 pub fn generate_ascii(s: &str, out: &mut [u16], level: u8) -> usize {
-    // 2 char = 1 codeword; +1 for length indicator +4 for mode switches
-    // TODO: Relax with the fixed +4 in required capacity
+    // 2 char = 1 codeword; +1 for length indicator +1 for mode switches
     let ecc_cw = ecc::ecc_count(level);
-    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 4, "output buffer not large enough");
+    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 1, "output buffer not large enough");
 
     // metadata
     let data_end = out.len() - ecc_cw;

@@ -58,11 +58,7 @@ pub trait RenderTarget {
 #[derive(Debug, Default)]
 /// Struct used to implement RenderTarget for \[bool\]
 ///
-/// This allows passing an \[bool\] to [PDF417::render]. Please note that
-/// after each row there is some padding zeros at the end of the current byte.
-/// Therefore, when using the slice of bytes to renders you must skip these
-/// bytes by checking if we reached the end of the row and discarding the end of
-/// the byte being rendered.
+/// This allows passing an \[bool\] to [PDF417::render].
 pub struct BoolSliceRenderConfig {
     i: usize,
     row_start: usize,
@@ -138,7 +134,11 @@ impl BitShifter {
 #[derive(Debug, Default)]
 /// Struct used to implement RenderTarget for \[u8\].
 ///
-/// This allows passing an \[u8\] to [PDF417::render].
+/// This allows passing an \[u8\] to [PDF417::render]. Please note that
+/// after each row there is some padding zeros at the end of the current byte.
+/// Therefore, when using the slice of bytes to renders you must skip these
+/// bytes by checking if we reached the end of the row and discarding the end of
+/// the byte being rendered.
 pub struct ByteSliceRenderConfig {
     bs: BitShifter,
     row_start: usize,
@@ -218,9 +218,11 @@ macro_rules! pdf417_width {
     };
     ($cols:expr, $scale_x:expr, $truncated:expr) => {
         if $truncated {
-            (START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 1) * $scale_x as usize
+            (pdf417::START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 1)
+                * $scale_x as usize
         } else {
-            (START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 17 + END_PATTERN_LEN as usize) * $scale_x as usize
+            (pdf417::START_PATTERN_LEN as usize + 17 + $cols as usize * 17 + 17 + pdf417::END_PATTERN_LEN as usize)
+                * $scale_x as usize
         }
     };
 }
@@ -234,7 +236,7 @@ macro_rules! pdf417_height {
         pdf417_height!($rows, 1);
     };
     ($rows:expr, $scale_y:expr) => {
-        $rows * $scale_y
+        $rows as usize * $scale_y as usize
     };
 }
 
