@@ -76,7 +76,8 @@ pub fn generate_text(s: &str, out: &mut [u16], level: u8) -> usize {
 
     let data_words = encode_bytes(s.as_bytes(), &mut out[3..data_end]);
     ecc::generate_ecc(out, level);
-    return data_words + ecc_cw + 3;
+
+    data_words + ecc_cw + 3
 }
 
 /// Encodes the `bytes` byte slice to the `out` codewords slice for later
@@ -122,7 +123,7 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
 
     out[i..].fill(900); // padding
 
-    return i;
+    i
 }
 
 /// Generates the required codewords to store the __ASCII__ string `s` to the
@@ -132,9 +133,9 @@ pub fn encode_bytes(bytes: &[u8], out: &mut [u16]) -> usize {
 /// (900). This function returns the total number of codewords written to the
 /// `out` slice excluding padding.
 pub fn generate_ascii(s: &str, out: &mut [u16], level: u8) -> usize {
-    // 2 char = 1 codeword; +1 for length indicator +1 for mode switches
+    // 2 char = 1 codeword; +1 for length indicator
     let ecc_cw = ecc::ecc_count(level);
-    assert!(out.len() >= s.len()/2 + ecc_cw + 1 + 1, "output buffer not large enough");
+    assert!(out.len() > s.len()/2 + ecc_cw + 1, "output buffer not large enough");
 
     // metadata
     let data_end = out.len() - ecc_cw;
@@ -142,7 +143,8 @@ pub fn generate_ascii(s: &str, out: &mut [u16], level: u8) -> usize {
 
     let data_words = encode_ascii(s, &mut out[1..data_end]);
     ecc::generate_ecc(out, level);
-    return data_words + ecc_cw + 1;
+
+    data_words + ecc_cw + 1
 }
 
 macro_rules! push {
@@ -197,10 +199,10 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
     while k < s.len() {
         let c = s[k];
         match c {
-            b'A'..=b'Z' => {
+            c if c.is_ascii_uppercase() => { // b'A'..=b'Z'
                 match mode {
                     0 => (),
-                    1 => if k + 1 < s.len() && ((b'a'..=b'z').contains(&s[k + 1]) || s[k + 1] == b' ') {
+                    1 => if k + 1 < s.len() && s[k + 1].is_ascii_lowercase() {
                         push!(out, i, right, 27);
                     } else {
                         push!(out, i, right, 29, 29; mode = 0);
@@ -211,7 +213,7 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                 }
                 push!(out, i, right, c - b'A'; k = k + 1);
             },
-            b'a'..=b'z' => {
+            c if c.is_ascii_lowercase() => { // b'a'..=b'z'
                 match mode {
                     0 | 2 => push!(out, i, right, 27; mode = 1),
                     1 => (),
@@ -220,10 +222,9 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                 }
                 push!(out, i, right, c - b'a'; k = k + 1);
             },
-            b'0'..=b'9' if mode == 2 => push!(out, i, right, c - b'0'; k = k + 1),
-            b'0'..=b'9' => {
+            c if c.is_ascii_digit() => { // b'0'..=b'9'
                 let mut end = k + 1;
-                while end < s.len() && end-k < 44 && (b'0'..=b'9').contains(&s[end]) {
+                while end < s.len() && end-k < 44 && s[end].is_ascii_digit() {
                     end += 1;
                 }
                 let digits = end - k;
@@ -273,7 +274,7 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                     i += nb;
                 }
 
-                if mode == 4 && k < s.len() && !(b'0'..=b'9').contains(&s[k]) {
+                if mode == 4 && k < s.len() && !s[k].is_ascii_digit() {
                     push!(out, i, right, 900; mode = 0);
                 }
             },
@@ -287,7 +288,7 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
                         0 | 1 => push!(out, i, right, 28; mode = 2),
                         2 => (),
                         /* no switch if the char is also present in the punc table */
-                        3 if (p >= 1 && p <= 4) || (p >= 6 && p <= 9)  => (),
+                        3 if (1..=4).contains(&p) || (6..=9).contains(&p) => (),
                         3 => push!(out, i, right, 29, 28; mode = 2),
                         _ => unreachable!("Unknown mode {mode}"),
                     }
@@ -325,7 +326,8 @@ pub fn encode_ascii(s: &str, out: &mut [u16]) -> usize {
     }
 
     out[i..].fill(900); // padding
-    return i;
+
+    i
 }
 
 #[cfg(test)]
