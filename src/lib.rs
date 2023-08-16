@@ -39,7 +39,7 @@ pub trait RenderTarget {
     /// Called at the beginning of the rendering of an PDF417 passed by
     /// reference. You can store any state you want which you will be able to
     /// use later in the next functions.
-    fn init_state(&self, config: &PDF417) -> Self::State;
+    fn begin(&self, config: &PDF417) -> Self::State;
 
     /// Called at the beginning of a row (before the start pattern and left
     /// codeword are appended).
@@ -53,6 +53,11 @@ pub trait RenderTarget {
     /// The `count` is guaranteed to be less or equal than 32. A set bit
     /// represents a black pixel and a unset bit a white pixel.
     fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8);
+
+    #[allow(unused_variables)]
+    /// Called at the end of the rendering of an PDF417. The last state is
+    /// moved into this function.
+    fn end(&mut self, state: Self::State) {}
 }
 
 #[derive(Debug, Default)]
@@ -68,7 +73,7 @@ pub struct BoolSliceRenderConfig {
 impl RenderTarget for [bool] {
     type State = BoolSliceRenderConfig;
 
-    fn init_state(&self, config: &PDF417) -> Self::State {
+    fn begin(&self, config: &PDF417) -> Self::State {
         BoolSliceRenderConfig { scale: config.scale, ..Default::default() }
     }
 
@@ -110,7 +115,7 @@ struct BitShifter {
 impl BitShifter {
     #[inline]
     pub fn shift(&mut self, storage: &mut [u8], v: bool) {
-        storage[self.cursor] |= (v as u8) << (7 - self.bit);
+        if v { storage[self.cursor] |= 1 << (7 - self.bit); }
         self.bit += 1;
         if self.bit == 8 {
             self.cursor += 1;
@@ -148,7 +153,7 @@ pub struct ByteSliceRenderConfig {
 impl RenderTarget for [u8] {
     type State = ByteSliceRenderConfig;
 
-    fn init_state(&self, config: &PDF417) -> Self::State {
+    fn begin(&self, config: &PDF417) -> Self::State {
         ByteSliceRenderConfig { scale: config.scale, ..Default::default() }
     }
 
@@ -180,8 +185,9 @@ impl RenderTarget for [u8] {
         while count > 0 {
             // get upper 8 bits
             count -= 1;
+            let is_set = (value >> count) & 1 == 1;
             for _ in 0..w {
-                state.bs.shift(self, (value >> count) & 1 == 1);
+                state.bs.shift(self, is_set);
             }
         }
     }
@@ -250,7 +256,7 @@ impl<'a> PDF417<'a> {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
         assert!(codewords.len() <= (rows as usize * cols as usize),
-            "codewords will not fit in the provided configuration");
+            "The data will not fit in the provided configuration");
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
 
         PDF417 { codewords, rows, cols, level, scale: (1, 1), truncated: false }
@@ -309,36 +315,30 @@ impl<'a> PDF417<'a> {
         self.rows
     }
 
-    /// Set the number of rows of the PDF417.
-    pub const fn with_rows(mut self, rows: u8) -> Self {
-        assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
-        self.rows = rows;
-        self
-    } 
-
-    /// Set the number of rows of the PDF417.
-    pub const fn set_rows(&mut self, rows: u8) -> &mut Self {
-        assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
-        self.rows = rows;
-        self
-    } 
-
     /// Get the number of columns of the PDF417. This is used to lay down the 
     /// start, left, right and end indicators in the render function.
     pub const fn cols(&self) -> u8 {
         self.cols
     }
 
-    /// Set the number of columns of the PDF417.
-    pub const fn with_cols(mut self, cols: u8) -> Self {
+    /// Set the dimensions of the PDF417 as (number of rows, number of cols).
+    pub const fn with_dimensions(mut self, (rows, cols): (u8, u8)) -> Self {
+        assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
+        assert!(self.codewords.len() <= (rows as usize * cols as usize),
+            "The data will not fit in the provided configuration");
+        self.rows = rows;
         self.cols = cols;
         self
     } 
 
     /// Set the number of columns of the PDF417.
-    pub const fn set_cols(&mut self, cols: u8) -> &mut Self {
+    pub const fn set_dimensions(&mut self, (rows, cols): (u8, u8)) -> &mut Self {
+        assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
+        assert!(self.codewords.len() <= (rows as usize * cols as usize),
+            "The data will not fit in the provided configuration");
+        self.rows = rows;
         self.cols = cols;
         self
     } 
@@ -355,7 +355,7 @@ impl<'a> PDF417<'a> {
         let level_val = self.level as u32 * 3 + (self.rows as u32 - 1) % 3;
 
         let mut table = 0;
-        let mut state = storage.init_state(self);
+        let mut state = storage.begin(self);
         let mut col = 0;
         let mut row = 0;
 
@@ -403,6 +403,8 @@ impl<'a> PDF417<'a> {
                 if table == 2 { table = 0; } else { table += 1 };
             }
         }
+
+        storage.end(state);
     }
 }
 
@@ -413,7 +415,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_bool_slice() {
         let mut t = [false; 13];
-        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 3, 1, 0));
+        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0));
         t.append_bits(&mut state, 0b110001, 6);
         t.append_bits(&mut state, 0b11, 2);
         t.append_bits(&mut state, 0b00111, 5);
@@ -424,7 +426,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_byte_slice() {
         let mut t = [0u8; 5];
-        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 3, 1, 0));
+        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0));
         t.append_bits(&mut state, 0b10101010_10101010_1, 17);
         t.append_bits(&mut state, 0b1110001_110001, 13);
         t.append_bits(&mut state, 0b11, 2);
@@ -436,7 +438,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_bool_slice_scaled() {
         let mut t = [false; 6 * 3 * 2];
-        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
+        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
         t.row_start(&mut state);
         t.append_bits(&mut state, 0b110001, 6);
 
@@ -449,7 +451,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_byte_slice_scaled() {
         let mut t = [0u8; (8 * 3 * 2) / 8];
-        let mut state = t.init_state(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
+        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
         t.row_start(&mut state);
         t.append_bits(&mut state, 0b01000111, 8);
 
