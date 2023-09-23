@@ -5,18 +5,20 @@ const BLACK: &str = "\x1B[38;2;0;0;0m█";
 
 const PADDING: usize = 4;
 const COLS: u8 = 4;
-const ROWS: u8 = 6;
+const ROWS: u8 = 7;
 const LEVEL: u8 = 1;
-const SCALE: (u32, u32) = (1, 1);
 
-const W: usize = pdf417_width!(COLS, SCALE.0);
-const H: usize = pdf417_height!(ROWS, SCALE.1);
+const W: usize = pdf417_width!(COLS);
+const H: usize = pdf417_height!(ROWS);
 
 fn main() {
-    const S: &str = "💛 ワンピース";
     let mut input = [0u16; (COLS*ROWS) as usize];
 
-    PDF417Encoder::new(&mut input).append_utf8(S)
+    // \x1d - GS, Group Separator, ASCII Code 29 (Hex 1D)
+    // \x1e - RS, Record Separator, ASCII Code 30 (Hex 1E)
+    // \x04 - EOT, End of Transmission, ASCII Code 04 (Hex 04)
+    PDF417Encoder::new(&mut input)
+        .append_ascii("\x1e06\x1d66831000\x1d9117327\x1e\x04")
         .seal(LEVEL);
 
     let mut storage = [false; W * H];

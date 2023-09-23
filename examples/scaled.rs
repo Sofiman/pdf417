@@ -7,7 +7,7 @@ const PADDING: usize = 4;
 const COLS: u8 = 2;
 const ROWS: u8 = 5;
 const LEVEL: u8 = 0;
-const SCALE: (u32, u32) = (2, 2);
+const SCALE: (u32, u32) = (1, 3);
 
 const W: usize = pdf417_width!(COLS, SCALE.0);
 const H: usize = pdf417_height!(ROWS, SCALE.1);
@@ -15,10 +15,9 @@ const H: usize = pdf417_height!(ROWS, SCALE.1);
 fn main() {
     const S: &str = "Test";
     let mut input = [0u16; (COLS*ROWS) as usize];
-    let data_words = generate_ascii(S, &mut input, LEVEL);
-    println!("{data_words}/{}", input.len());
+    PDF417Encoder::new(&mut input).append_ascii(S).seal(LEVEL);
 
-    let mut storage = [0u8; (W * H) / 8 + ROWS as usize];
+    let mut storage = [0u8; ((W - 1) / 8 + 1) * H];
     let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL).scaled(SCALE);
     pdf417.render(&mut storage[..]);
 

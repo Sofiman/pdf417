@@ -14,8 +14,9 @@ const H: usize = pdf417_height!(ROWS, 1);
 fn main() {
     const S: &str = "Truncated PDF417";
     let mut input = [0u16; (COLS*ROWS) as usize];
-    let data_words = generate_ascii(S, &mut input, LEVEL);
-    println!("{data_words}/{}", input.len());
+    let enc = PDF417Encoder::new(&mut input).append_ascii(S);
+    println!("{}/{}", enc.count(), enc.capacity());
+    enc.seal(LEVEL);
 
     let mut storage = [false; W * H];
     let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL)
