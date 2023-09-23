@@ -101,14 +101,15 @@ pub trait RenderTarget {
 pub struct BoolSliceRenderConfig {
     i: usize,
     row_start: usize,
-    scale: (u32, u32)
+    scale: (u32, u32),
+    inverted: bool
 }
 
 impl RenderTarget for [bool] {
     type State = BoolSliceRenderConfig;
 
     fn begin(&self, config: &PDF417) -> Self::State {
-        BoolSliceRenderConfig { scale: config.scale, ..Default::default() }
+        BoolSliceRenderConfig { scale: config.scale, inverted: config.inverted, ..Default::default() }
     }
 
     fn row_start(&mut self, state: &mut Self::State) {
@@ -128,12 +129,15 @@ impl RenderTarget for [bool] {
         }
     }
 
-    fn append_bits(&mut self, state: &mut Self::State, value: u32, count: u8) {
+    fn append_bits(&mut self, state: &mut Self::State, mut value: u32, count: u8) {
+        if state.inverted {
+            value = !value;
+        }
         let w = state.scale.0 as usize;
         let i = &mut state.i;
         let mut mask = 1 << (count as u32 - 1);
         for _ in 0..count {
-            self[(*i)..(*i + w)].fill((value & mask) == mask);
+            self[(*i)..(*i + w)].fill((value & mask) != 0);
             *i += w;
             mask >>= 1;
         }
@@ -181,6 +185,7 @@ impl BitShifter {
 pub struct ByteSliceRenderConfig {
     bs: BitShifter,
     row_start: usize,
+    inverted: bool,
     scale: (u32, u32)
 }
 
@@ -188,7 +193,7 @@ impl RenderTarget for [u8] {
     type State = ByteSliceRenderConfig;
 
     fn begin(&self, config: &PDF417) -> Self::State {
-        ByteSliceRenderConfig { scale: config.scale, ..Default::default() }
+        ByteSliceRenderConfig { scale: config.scale, inverted: config.inverted, ..Default::default() }
     }
 
     fn row_start(&mut self, state: &mut Self::State) {
@@ -214,7 +219,10 @@ impl RenderTarget for [u8] {
         }
     }
 
-    fn append_bits(&mut self, state: &mut Self::State, value: u32, mut count: u8) {
+    fn append_bits(&mut self, state: &mut Self::State, mut value: u32, mut count: u8) {
+        if state.inverted {
+            value = !value;
+        }
         let w = state.scale.0 as usize;
         while count > 0 {
             // get upper 8 bits
@@ -235,7 +243,8 @@ pub struct PDF417<'a> {
     cols: u8,
     level: u8,
     scale: (u32, u32),
-    truncated: bool
+    truncated: bool,
+    inverted: bool
 }
 
 const LEADING_ONE: u32 = 1 << 16;
@@ -293,7 +302,7 @@ impl<'a> PDF417<'a> {
             "The data will not fit in the provided configuration");
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
 
-        PDF417 { codewords, rows, cols, level, scale: (1, 1), truncated: false }
+        PDF417 { codewords, rows, cols, level, scale: (1, 1), truncated: false, inverted: false }
     }
 
     /// Returns if the PDF417 is set to be rendered as a Truncated PDF417.
@@ -341,6 +350,23 @@ impl<'a> PDF417<'a> {
     pub const fn set_scaled(&mut self, scale: (u32, u32)) -> &mut Self {
         assert!(scale.0 != 0 && scale.1 != 0, "scale cannot be zero");
         self.scale = scale;
+        self
+    }
+
+    /// Returns if the PDF417 is set to be rendered with inverted colors.
+    pub const fn is_inverted(&self) -> bool {
+        self.inverted
+    }
+
+    /// Marks whether this PDF417 should be rendered with pixel values inverted.
+    pub const fn inverted(mut self, inverted: bool) -> Self {
+        self.inverted = inverted;
+        self
+    }
+
+    /// Marks whether this PDF417 should be rendered with pixel values inverted.
+    pub const fn set_inverted(&mut self, inverted: bool) -> &mut Self {
+        self.inverted = inverted;
         self
     }
 
