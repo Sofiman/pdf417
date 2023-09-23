@@ -100,8 +100,8 @@ impl<'a> PDF417Encoder<'a> {
     }
 
     /// Appends a numeric segment containing a 64-bit unsigned integer `n`. For
-    /// larger numbers please use the [append_ascii] method which can handle 44+
-    /// digit numbers.
+    /// larger numbers please use the [PDF417Encoder::append_ascii] method which
+    /// can handle 44+ digit numbers.
     pub fn append_num(mut self, mut n: u64) -> Self {
         self.storage[self.used] = M_LATCH_NUMERIC;
 
@@ -182,8 +182,8 @@ impl<'a> PDF417Encoder<'a> {
     /// Appends an ASCII (text) segment. *Warning*: This function uses the
     /// PDF417 table based encoding to optimize the size of the text and
     /// therefore support only a small set of displayable characters. If you
-    /// want to encode an UTF-8 string, use [append_utf8] instead (uses more
-    /// space).
+    /// want to encode an UTF-8 string, use [PDF417Encoder::append_utf8] instead
+    /// (uses more space).
     pub fn append_ascii(mut self, s: &str) -> Self {
         debug_assert!(s.is_ascii(), "use append_utf8 for UTF-8 strings");
         let out = &mut self.storage;
@@ -331,10 +331,10 @@ impl<'a> PDF417Encoder<'a> {
 
     /// Appends a special segement crafted to store an __UTF-8__ string `s`.
     /// __Note that the conversion is space inefficient, if the string is
-    /// composed of ASCII characters, please consider using [generate_ascii]
-    /// instead.__ Internally, we use a ECI identifier (\\000026) to switch to
-    /// the UTF-8 code page then append a byte segment to store the string's
-    /// bytes.
+    /// composed of ASCII characters, please consider using
+    /// [PDF417Encoder::append_ascii] instead.__ Internally, we use a ECI
+    /// identifier (\\000026) to switch to the UTF-8 code page then append a
+    /// byte segment to store the string's bytes.
     pub fn append_utf8(mut self, s: &str) -> Self {
         self.storage[self.used] = ECI_CODE_PAGE; // ECI identifier for code page
         self.storage[self.used + 1] = 26; // UTF-8 is \000026

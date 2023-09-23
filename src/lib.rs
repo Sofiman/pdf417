@@ -2,6 +2,25 @@
 //!
 //! This crate implements a customizable PDF417 barcode generator that is
 //! suitable for both std and no-std (no alloc) applications.
+//!
+//! #### Basic Example
+//! ```
+//! # use pdf417::*;
+//! const COLS: u8 = 3;
+//! const ROWS: u8 = 5;
+//! const ECC_LEVEL: u8 = 1;
+//! const WIDTH: usize = pdf417_width!(COLS);
+//! const HEIGHT: usize = pdf417_height!(ROWS);
+//! 
+//! // High-level encoding
+//! let mut input = [0u16; (ROWS * COLS) as usize];
+//! PDF417Encoder::new(&mut input)
+//!     .append_ascii("Hello, world!").seal(ECC_LEVEL);
+//! 
+//! // Rendering
+//! let mut storage = [false; WIDTH * HEIGHT];
+//! PDF417::new(&input, ROWS, COLS, ECC_LEVEL).render(&mut storage[..]);
+//! ```
 
 #![no_std]
 #![feature(const_mut_refs)]
