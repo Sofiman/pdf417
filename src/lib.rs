@@ -21,6 +21,21 @@
 //! let mut storage = [false; WIDTH * HEIGHT];
 //! PDF417::new(&input, ROWS, COLS, ECC_LEVEL).render(&mut storage[..]);
 //! ```
+//!
+//! ### Data Segments
+//!
+//! You can multiple data segments (aka encoding modes) on a single barcode. The
+//! available types are:
+//! - **numeric**: efficient encoding of 44+ digit numbers
+//! - **ascii**: efficient encoding of text (alphanumeric + punctuation) with
+//!     support for non-displyable ASCII values which are encoded as raw bytes.
+//! - **bytes**: binary data as bytes
+//! 
+//! An additional **UTF-8** mode is available which allows encoding of UTF-8 strings
+//! using an ECI identifier and byte encoding mode (note that this encoding takes
+//! significantly more space than the ASCII mode).
+//! 
+//! > See the different methods available on [PDF417Encoder] struct.
 
 #![no_std]
 #![feature(const_mut_refs)]
