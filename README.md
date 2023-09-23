@@ -1,4 +1,6 @@
-![Crates.io](https://img.shields.io/crates/v/pdf417)
+[![crates.io](https://img.shields.io/crates/v/pdf417)](https://crates.io/crates/pdf417)
+
+![PDF417 generated on esp32-s3 and displayed on a SSD1306 OLED screen](images/pdf417_esp23_s3_ssd1306_small.jpg)
 
 # PDF417 Barcode generator
 
