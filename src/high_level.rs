@@ -111,7 +111,7 @@ impl<'a> PDF417Encoder<'a> {
             let variant = val as usize;
             assert!(variant <= 34, "invalid variant (0-34)");
             use crate::tables::*;
-            MICRO_PDF417_VARIANTS[2 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize
+            M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + variant] as usize
         } else {
             let level = val;
             ecc::ecc_count(level)
@@ -406,8 +406,8 @@ impl<'a> PDF417Encoder<'a> {
 
             use crate::tables::*;
             let (count, offset) = (
-                MICRO_PDF417_VARIANTS[2 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize,
-                MICRO_PDF417_VARIANTS[3 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize
+                M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + variant] as usize,
+                M_PDF417_VARIANTS[3 * M_PDF417_VARIANTS_COUNT + variant] as usize
             );
 
             let total = self.capacity() - count;
@@ -536,8 +536,8 @@ mod tests {
 
     #[test]
     fn test_seal_micro() {
-        use crate::tables::{MICRO_PDF417_VARIANTS, MICRO_PDF417_VARIANTS_COUNT};
-        let mut codewords = [0u16; 1 + 3 + 3 + 10 + MICRO_PDF417_VARIANTS[2 * MICRO_PDF417_VARIANTS_COUNT + 0] as usize];
+        use crate::tables::{M_PDF417_VARIANTS, M_PDF417_VARIANTS_COUNT};
+        let mut codewords = [0u16; 1 + 3 + 3 + 10 + M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + 0] as usize];
 
         PDF417Encoder::new(&mut codewords, true)
             .append_ascii("Test")

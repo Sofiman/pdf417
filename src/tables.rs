@@ -2949,22 +2949,22 @@ pub const ECC_MICRO: [u16; 344] = [
     718, 435
 ];
 
-pub const MICRO_PDF417_VARIANTS_COUNT: usize = 34;
-pub const MICRO_PDF417_VARIANTS: [u16; MICRO_PDF417_VARIANTS_COUNT * 4] = [
+pub const M_PDF417_VARIANTS_COUNT: usize = 34;
+pub const M_PDF417_VARIANTS: [u16; M_PDF417_VARIANTS_COUNT * 4] = [
      1,  1,  1,  1,  1,  1, 2,  2,  2,  2,  2,  2,  2,  3,  3,  3,   3,   3,   3,   3,   3,   3,   3,  4,  4,  4,  4,   4,   4,   4,   4,   4,   4,   4, /* cols */
     11, 14, 17, 20, 24, 28, 8, 11, 14, 17, 20, 23, 26,  6,  8, 10,  12,  15,  20,  26,  32,  38,  44,  4,  6,  8, 10,  12,  15,  20,  26,  32,  38,  44, /* rows */
      7,  7,  7,  8,  8,  8, 8,  9,  9, 10, 11, 13, 15, 12, 14, 16,  18,  21,  26,  32,  38,  44,  50,  8, 12, 14, 16,  18,  21,  26,  32,  38,  44,  50, /* ecc count */
      0,  0,  0,  7,  7,  7, 7, 15, 15, 24, 34, 57, 84, 45, 70, 99, 115, 133, 154, 180, 212, 250, 294,  7, 45, 70, 99, 115, 133, 154, 180, 212, 250, 294  /* k-offset */
 ];
 
-pub const MICRO_PDF417_RAP: [u8; MICRO_PDF417_VARIANTS_COUNT * 4] = [
+pub const M_PDF417_RAP: [u8; M_PDF417_VARIANTS_COUNT * 4] = [
      1,  8, 36, 19,  9, 25, 1,  1,  8, 36, 19,  9, 27,  1,  7, 15,  25,  37,   1,   1,  21,  15,   1, 47,  1,  7, 15,  25,  37,   1,   1,  21,  15,   1, /* left idx */
      1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  7, 15,  25,  37,  17,   9,  29,  31,  25, 19,  1,  7, 15,  25,  37,  17,   9,  29,  31,  25, /* center idx */
      9,  8, 36, 19, 17, 33, 1,  9,  8, 36, 19, 17, 35,  1,  7, 15,  25,  37,  33,  17,  37,  47,  49, 43,  1,  7, 15,  25,  37,  33,  17,  37,  47,  49, /* right idx */
      0,  1,  2,  0,  2,  0, 0,  0,  1,  2,  0,  2,  2,  0,  0,  2,   0,   0,   0,   0,   2,   2,   0,  1,  0,  0,  2,   0,   0,   0,   0,   2,   2,   0 /* initial table */
 ];
 
-pub const MICRO_PDF417_SIDE: [u16; 52] = [
+pub const M_PDF417_SIDE: [u16; 52] = [
     0x322, 0x3A2, 0x3B2, 0x332, 0x372, 0x37A, 0x33A, 0x3BA, 0x39A, 0x3DA,
     0x3CA, 0x38A, 0x30A, 0x31A, 0x312, 0x392, 0x3D2, 0x3D6, 0x3D4, 0x394,
     0x3B4, 0x3A4, 0x3A6, 0x3AE, 0x3AC, 0x3A8, 0x328, 0x32C, 0x32E, 0x326,
@@ -2973,7 +2973,7 @@ pub const MICRO_PDF417_SIDE: [u16; 52] = [
     0x342, 0x362
 ];
 
-pub const MICRO_PDF417_CENTER: [u16; 52] = [
+pub const M_PDF417_CENTER: [u16; 52] = [
     0x2CE, 0x24E, 0x26E, 0x22E, 0x226, 0x236, 0x216, 0x212, 0x21A, 0x23A,
     0x232, 0x222, 0x262, 0x272, 0x27A, 0x2FA, 0x2F2, 0x2F6, 0x276, 0x274,
     0x264, 0x266, 0x246, 0x242, 0x2C2, 0x2E2, 0x2E6, 0x2E4, 0x2EC, 0x26C,
@@ -2982,22 +2982,25 @@ pub const MICRO_PDF417_CENTER: [u16; 52] = [
     0x2DC, 0x2DE
 ];
 
+/// Get the variant number for a dimension (rows, cols). Returns None the
+/// combinaison of rows and cols is invalid (not supported) according to the
+/// MicroPDF417 specification.
 pub const fn get_variant(rows: u8, cols: u8) -> Option<u8> {
     let mut start = 0;
-    while start < MICRO_PDF417_VARIANTS_COUNT && MICRO_PDF417_VARIANTS[start] != cols as u16 {
+    while start < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[start] != cols as u16 {
         start += 1;
     }
 
-    if start == MICRO_PDF417_VARIANTS_COUNT {
+    if start == M_PDF417_VARIANTS_COUNT {
         return None; // the number of cols is invalid
     }
 
     let mut end = start;
-    while end < MICRO_PDF417_VARIANTS_COUNT && MICRO_PDF417_VARIANTS[end] == cols as u16 {
+    while end < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[end] == cols as u16 {
         end += 1;
     }
 
-    while start < end && MICRO_PDF417_VARIANTS[1 * MICRO_PDF417_VARIANTS_COUNT + start] != rows as u16 {
+    while start < end && M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + start] != rows as u16 {
         start += 1;
     }
 
@@ -3008,3 +3011,33 @@ pub const fn get_variant(rows: u8, cols: u8) -> Option<u8> {
     Some(start as u8)
 }
 
+/// Find a suitable variant that has at least `capacity` free codeword slots.
+/// None if capacity is too large to be stored by a MicroPDF417.
+pub const fn find_variant(capacity: usize) -> Option<u8> {
+    let mut i = 0;
+
+    while i < M_PDF417_VARIANTS_COUNT {
+        if M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + i] as usize
+         * M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + i] as usize
+         - M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + i] as usize >= capacity {
+             break;
+        }
+        i += 1;
+    }
+
+    if i == M_PDF417_VARIANTS_COUNT {
+        None
+    } else {
+        Some(i as u8)
+    }
+}
+
+/// Returns the dimensions of a MicroPDF417 variant as (rows, cols).
+#[inline]
+pub const fn variant_dim(variant: u8) -> (u8, u8) {
+    assert!(variant <= 34, "invalid variant (0-34)");
+    (
+        M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + variant as usize] as u8,
+        M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + variant as usize] as u8
+    )
+}

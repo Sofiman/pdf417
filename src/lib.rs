@@ -43,12 +43,12 @@
 #![feature(const_mut_refs)]
 
 mod tables;
-use tables::{HL_TO_LL, MICRO_PDF417_VARIANTS, MICRO_PDF417_VARIANTS_COUNT, MICRO_PDF417_RAP, MICRO_PDF417_SIDE, MICRO_PDF417_CENTER};
+use tables::{HL_TO_LL, M_PDF417_VARIANTS, M_PDF417_VARIANTS_COUNT, M_PDF417_RAP, M_PDF417_SIDE, M_PDF417_CENTER};
 
 pub mod ecc;
 pub mod high_level;
 pub use high_level::*;
-pub use tables::get_variant;
+pub use tables::{get_variant, find_variant, variant_dim};
 
 const START: u32 = 0b11111111010101000;
 const   END: u32 = 0b111111101000101001;
@@ -474,6 +474,33 @@ impl<'a> PDF417<'a> {
     }
 }
 
+#[macro_export]
+/// Calculate the width in pixels of a PDF417 barcode according to the
+/// configuration (Columns, X scale, Is Truncated). Only the number of columns
+/// is required, other parameters can be omitted in order.
+macro_rules! m_pdf417_width {
+    ($cols:expr) => {
+        m_pdf417_width!($cols, 1);
+    };
+    ($cols:expr, $scale_x:expr) => {
+        (10 + $cols as usize * 17 + ($cols as usize / 3) * 10 + 10 + 1)
+            * $scale_x as usize
+    };
+}
+
+#[macro_export]
+/// Calculate the height in pixels of a PDF417 barcode according to the
+/// configuration (Rows, Y scale). Only the number of rows is required, other
+/// parameters can be omitted in order.
+macro_rules! m_pdf417_height {
+    ($rows:expr) => {
+        m_pdf417_height!($rows, 2);
+    };
+    ($rows:expr, $scale_y:expr) => {
+        $rows as usize * $scale_y as usize
+    };
+}
+
 pub struct MicroPDF417<'a> {
     codewords: &'a [u16],
     variant: u8
@@ -493,18 +520,18 @@ impl<'a> MicroPDF417<'a> {
     pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
         let variant = self.variant as usize;
         let (cols, rows, mut left, mut center, mut right, mut table) = (
-            MICRO_PDF417_VARIANTS[variant] as usize,
-            MICRO_PDF417_VARIANTS[MICRO_PDF417_VARIANTS_COUNT + variant] as usize,
-            MICRO_PDF417_RAP[0 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
-            MICRO_PDF417_RAP[1 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
-            MICRO_PDF417_RAP[2 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
-            MICRO_PDF417_RAP[3 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize,
+            M_PDF417_VARIANTS[variant] as usize,
+            M_PDF417_VARIANTS[M_PDF417_VARIANTS_COUNT + variant] as usize,
+            M_PDF417_RAP[0 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            M_PDF417_RAP[1 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            M_PDF417_RAP[2 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            M_PDF417_RAP[3 * M_PDF417_VARIANTS_COUNT + variant] as usize,
         );
         let mut state = storage.begin((rows as u8, cols as u8, (1, 1), false));
 
         for row in 0..rows {
             storage.row_start(&mut state);
-            storage.append_bits(&mut state, MICRO_PDF417_SIDE[left] as u32, 10);
+            storage.append_bits(&mut state, M_PDF417_SIDE[left] as u32, 10);
 
             let mut col = 0;
             while col < cols && col < 2 {
@@ -513,7 +540,7 @@ impl<'a> MicroPDF417<'a> {
             }
 
             if col < cols {
-                storage.append_bits(&mut state, MICRO_PDF417_CENTER[center] as u32, 10);
+                storage.append_bits(&mut state, M_PDF417_CENTER[center] as u32, 10);
 
                 while col < cols {
                     storage.append_bits(&mut state, cw!(table, self.codewords[row * cols + col]), 17);
@@ -521,7 +548,7 @@ impl<'a> MicroPDF417<'a> {
                 }
             }
 
-            storage.append_bits(&mut state, ((MICRO_PDF417_SIDE[right] as u32) << 1) | 1, 11);
+            storage.append_bits(&mut state, ((M_PDF417_SIDE[right] as u32) << 1) | 1, 11);
             storage.row_end(&mut state);
 
             if left == 51 { left = 0; } else { left += 1; }

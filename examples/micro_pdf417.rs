@@ -8,8 +8,8 @@ const COLS: u8 = 1;
 const ROWS: u8 = 11;
 const V: Option<u8> = get_variant(ROWS, COLS);
 
-const W: usize = 10 + COLS as usize * 17 + (COLS as usize / 3) * 10 + 10 + 1;
-const H: usize = ROWS as usize;
+const W: usize = m_pdf417_width!(COLS);
+const H: usize = m_pdf417_height!(ROWS);
 
 fn main() {
     let variant = V.unwrap();
