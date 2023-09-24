@@ -60,6 +60,28 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
     }
 }
 
+pub fn generate_micro_ecc(codewords: &mut [u16], count: usize, k: usize) {
+    assert!(codewords.len() >= count);
+    let (data, ecc) = codewords.split_at_mut(codewords.len() - count);
+    ecc.fill(0);
+
+    for cw in data {
+        let t = (*cw + ecc[0]) % 929;
+
+        for i in (0..count).rev() {
+            let factor = ((t as usize * ECC_MICRO[k + i] as usize) % 929) as u16;
+            let d = if i > 0 { ecc[count - i] } else { 0 };
+            ecc[count - 1 - i] = (d + 929 - factor) % 929;
+        }
+    }
+
+    for e in ecc {
+        if *e != 0 {
+            *e = 929 - *e;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{generate_ecc, ecc_count};

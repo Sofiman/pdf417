@@ -15,7 +15,7 @@ const H: usize = pdf417_height!(ROWS, SCALE.1);
 fn main() {
     const S: &str = "Test";
     let mut input = [0u16; (COLS*ROWS) as usize];
-    PDF417Encoder::new(&mut input).append_ascii(S).seal(LEVEL);
+    PDF417Encoder::new(&mut input, false).append_ascii(S).seal(LEVEL);
 
     let mut storage = [0u8; ((W - 1) / 8 + 1) * H];
     let pdf417 = PDF417::new(&input, ROWS, COLS, LEVEL).scaled(SCALE);

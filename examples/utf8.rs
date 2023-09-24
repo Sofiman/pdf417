@@ -16,7 +16,7 @@ fn main() {
     const S: &str = "💛 ワンピース";
     let mut input = [0u16; (COLS*ROWS) as usize];
 
-    PDF417Encoder::new(&mut input).append_utf8(S)
+    PDF417Encoder::new(&mut input, false).append_utf8(S)
         .seal(LEVEL);
 
     let mut storage = [false; W * H];

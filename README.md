@@ -47,7 +47,7 @@ const HEIGHT: usize = pdf417_height!(ROWS);
 
 // High-level encoding
 let mut input = [0u16; (ROWS * COLS) as usize];
-PDF417Encoder::new(&mut input)
+PDF417Encoder::new(&mut input, false)
     .append_ascii("Hello, world!").seal(ECC_LEVEL);
 
 // Rendering

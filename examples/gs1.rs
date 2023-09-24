@@ -17,7 +17,7 @@ fn main() {
     // \x1d - GS, Group Separator, ASCII Code 29 (Hex 1D)
     // \x1e - RS, Record Separator, ASCII Code 30 (Hex 1E)
     // \x04 - EOT, End of Transmission, ASCII Code 04 (Hex 04)
-    PDF417Encoder::new(&mut input)
+    PDF417Encoder::new(&mut input, false)
         .append_ascii("\x1e06\x1d66831000\x1d9117327\x1e\x04")
         .seal(LEVEL);
 

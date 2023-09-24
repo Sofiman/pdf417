@@ -14,7 +14,7 @@ const H: usize = pdf417_height!(ROWS, 1);
 fn main() {
     const S: &str = "Truncated PDF417";
     let mut input = [0u16; (COLS*ROWS) as usize];
-    let enc = PDF417Encoder::new(&mut input).append_ascii(S);
+    let enc = PDF417Encoder::new(&mut input, false).append_ascii(S);
     println!("{}/{}", enc.count(), enc.capacity());
     enc.seal(LEVEL);
 

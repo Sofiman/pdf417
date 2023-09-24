@@ -14,7 +14,7 @@
 //! 
 //! // High-level encoding
 //! let mut input = [0u16; (ROWS * COLS) as usize];
-//! PDF417Encoder::new(&mut input)
+//! PDF417Encoder::new(&mut input, false)
 //!     .append_ascii("Hello, world!").seal(ECC_LEVEL);
 //! 
 //! // Rendering
@@ -41,11 +41,12 @@
 #![feature(const_mut_refs)]
 
 mod tables;
-use tables::HL_TO_LL;
+use tables::{HL_TO_LL, MICRO_PDF417_VARIANTS, MICRO_PDF417_VARIANTS_COUNT, MICRO_PDF417_RAP, MICRO_PDF417_SIDE, MICRO_PDF417_CENTER};
 
 pub mod ecc;
 pub mod high_level;
 pub use high_level::*;
+pub use tables::get_variant;
 
 const START: u32 = 0b11111111010101000;
 const   END: u32 = 0b111111101000101001;
@@ -64,6 +65,9 @@ pub const MIN_COLS: u8 = 1;
 /// Maximum number of data columns in a PDF417 barcode.
 pub const MAX_COLS: u8 = 30;
 
+/// (rows, cols, (scaleX, scaleY), inverted)
+pub type PDF417Config = (u8, u8, (u32, u32), bool);
+
 /// A receiver for rendering PDF417 barcodes.
 pub trait RenderTarget {
     /// User defined type for storing the progress of the rendering and/or
@@ -73,7 +77,7 @@ pub trait RenderTarget {
     /// Called at the beginning of the rendering of an PDF417 passed by
     /// reference. You can store any state you want which you will be able to
     /// use later in the next functions.
-    fn begin(&self, config: &PDF417) -> Self::State;
+    fn begin(&self, config: PDF417Config) -> Self::State;
 
     /// Called at the beginning of a row (before the start pattern and left
     /// codeword are appended).
@@ -108,8 +112,8 @@ pub struct BoolSliceRenderConfig {
 impl RenderTarget for [bool] {
     type State = BoolSliceRenderConfig;
 
-    fn begin(&self, config: &PDF417) -> Self::State {
-        BoolSliceRenderConfig { scale: config.scale, inverted: config.inverted, ..Default::default() }
+    fn begin(&self, (_, _, scale, inverted): PDF417Config) -> Self::State {
+        BoolSliceRenderConfig { scale, inverted, ..Default::default() }
     }
 
     fn row_start(&mut self, state: &mut Self::State) {
@@ -151,7 +155,7 @@ struct BitShifter {
 }
 
 impl BitShifter {
-    #[inline]
+    #[inline(always)]
     pub fn shift(&mut self, storage: &mut [u8], v: bool) {
         if v { storage[self.cursor] |= 1 << (7 - self.bit); }
         self.bit += 1;
@@ -161,13 +165,13 @@ impl BitShifter {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn skip(&mut self) {
         self.cursor += 1;
         self.bit = 0;
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn move_to(&mut self, cursor: usize) {
         self.cursor = cursor;
         self.bit = 0;
@@ -192,8 +196,8 @@ pub struct ByteSliceRenderConfig {
 impl RenderTarget for [u8] {
     type State = ByteSliceRenderConfig;
 
-    fn begin(&self, config: &PDF417) -> Self::State {
-        ByteSliceRenderConfig { scale: config.scale, inverted: config.inverted, ..Default::default() }
+    fn begin(&self, (_, _, scale, inverted): PDF417Config) -> Self::State {
+        ByteSliceRenderConfig { scale, inverted, ..Default::default() }
     }
 
     fn row_start(&mut self, state: &mut Self::State) {
@@ -298,7 +302,7 @@ impl<'a> PDF417<'a> {
     pub const fn new(codewords: &'a [u16], rows: u8, cols: u8, level: u8) -> Self {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
-        assert!(codewords.len() <= (rows as usize * cols as usize),
+        assert!(codewords.len() == (rows as usize * cols as usize),
             "The data will not fit in the provided configuration");
         assert!(level < 9, "ECC level must be between 0 and 8 inclusive");
 
@@ -415,7 +419,7 @@ impl<'a> PDF417<'a> {
         let level_val = self.level as u32 * 3 + (self.rows as u32 - 1) % 3;
 
         let mut table = 0;
-        let mut state = storage.begin(self);
+        let mut state = storage.begin((self.rows, self.cols, self.scale, self.inverted));
         let mut col = 0;
         let mut row = 0;
 
@@ -468,14 +472,74 @@ impl<'a> PDF417<'a> {
     }
 }
 
+pub struct MicroPDF417<'a> {
+    codewords: &'a [u16],
+    variant: u8
+}
+
+impl<'a> MicroPDF417<'a> {
+    /// Creates a new PDF417 with the user's data section (codewords slice),
+    /// the level of error correction and the layout configuration
+    /// (rows and cols). The total codewords capacity is calculated with 
+    /// rows \* cols and must be greater or equal to the number of codewords
+    /// in the `codewords` slice.
+    pub const fn new(codewords: &'a [u16], variant: u8) -> Self {
+        assert!(variant <= 34);
+        MicroPDF417 { codewords, variant }
+    }
+
+    pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
+        let variant = self.variant as usize;
+        let (cols, rows, mut left, mut center, mut right, mut table) = (
+            MICRO_PDF417_VARIANTS[variant] as usize,
+            MICRO_PDF417_VARIANTS[MICRO_PDF417_VARIANTS_COUNT + variant] as usize,
+            MICRO_PDF417_RAP[0 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            MICRO_PDF417_RAP[1 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            MICRO_PDF417_RAP[2 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize - 1,
+            MICRO_PDF417_RAP[3 * MICRO_PDF417_VARIANTS_COUNT + variant] as usize,
+        );
+        let mut state = storage.begin((rows as u8, cols as u8, (1, 1), false));
+
+        for row in 0..rows {
+            storage.row_start(&mut state);
+            storage.append_bits(&mut state, MICRO_PDF417_SIDE[left] as u32, 10);
+
+            let mut col = 0;
+            while col < cols && col < 2 {
+                storage.append_bits(&mut state, cw!(table, self.codewords[row * cols + col]), 17);
+                col += 1;
+            }
+
+            if col < cols {
+                storage.append_bits(&mut state, MICRO_PDF417_CENTER[center] as u32, 10);
+
+                while col < cols {
+                    storage.append_bits(&mut state, cw!(table, self.codewords[row * cols + col]), 17);
+                    col += 1;
+                }
+            }
+
+            storage.append_bits(&mut state, ((MICRO_PDF417_SIDE[right] as u32) << 1) | 1, 11);
+            storage.row_end(&mut state);
+
+            if left == 51 { left = 0; } else { left += 1; }
+            if center == 51 { center = 0; } else { center += 1; }
+            if right == 51 { right = 0; } else { right += 1; }
+            if table == 2 { table = 0; } else { table += 1; }
+        }
+
+        storage.end(state);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RenderTarget, PDF417};
+    use super::RenderTarget;
 
     #[test]
     fn test_append_bits_to_bool_slice() {
         let mut t = [false; 13];
-        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0));
+        let mut state = t.begin((3, 1, (1, 1), false));
         t.append_bits(&mut state, 0b110001, 6);
         t.append_bits(&mut state, 0b11, 2);
         t.append_bits(&mut state, 0b00111, 5);
@@ -486,7 +550,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_byte_slice() {
         let mut t = [0u8; 5];
-        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0));
+        let mut state = t.begin((3, 1, (1, 1), false));
         t.append_bits(&mut state, 0b10101010_10101010_1, 17);
         t.append_bits(&mut state, 0b1110001_110001, 13);
         t.append_bits(&mut state, 0b11, 2);
@@ -498,7 +562,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_bool_slice_scaled() {
         let mut t = [false; 6 * 3 * 2];
-        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
+        let mut state = t.begin((3, 1, (3, 2), false));
         t.row_start(&mut state);
         t.append_bits(&mut state, 0b110001, 6);
 
@@ -511,7 +575,7 @@ mod tests {
     #[test]
     fn test_append_bits_to_byte_slice_scaled() {
         let mut t = [0u8; (8 * 3 * 2) / 8];
-        let mut state = t.begin(&PDF417::new(&[0u16; 1], 3, 1, 0).scaled((3, 2)));
+        let mut state = t.begin((3, 1, (3, 2), false));
         t.row_start(&mut state);
         t.append_bits(&mut state, 0b01000111, 8);
 

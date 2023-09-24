@@ -13,7 +13,7 @@ const H: usize = pdf417_height!(ROWS);
 
 fn main() {
     let mut input = [0u16; (COLS*ROWS) as usize];
-    let enc = PDF417Encoder::new(&mut input)
+    let enc = PDF417Encoder::new(&mut input, false)
         .append_ascii("AsciiSegment ")
         .append_num(42)
         .append_bytes(b" ByteSegment");
