@@ -56,7 +56,7 @@
 //! let variant = get_variant(ROWS, COLS).unwrap();
 //! let mut input = [0u16; (ROWS * COLS) as usize];
 //! PDF417Encoder::new(&mut input, true)
-//!     .append_num(123456).seal(variant);
+//!     .append_num(12345678).seal(variant);
 //!
 //! // Rendering
 //! let mut storage = [false; WIDTH * HEIGHT];
