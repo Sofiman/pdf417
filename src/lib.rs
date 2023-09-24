@@ -3,7 +3,8 @@
 //! A no-std and no-alloc PDF417 encoder for embedded applications (also works for
 //! std). This library implements mutliple encoding modes for numbers, strings and
 //! bytes according to the specification. You can also customize the rendering of
-//! the barcodes (size, storage and inverted) and supports the Truncated PDF417.
+//! the barcodes (size, storage and inverted) and supports both Truncated PDF417
+//! and MicroPDF417.
 //!
 //! #### Basic Example
 //! ```
@@ -38,6 +39,31 @@
 //! significantly more space than the ASCII mode).
 //! 
 //! > See the different methods available on [PDF417Encoder] struct.
+//!
+//! ### MicroPDF417
+//!
+//! This library also supports the generation of MicroPDF417. Here is an
+//! example:
+//!
+//! ```
+//! # use pdf417::*;
+//! const COLS: u8 = 1;
+//! const ROWS: u8 = 11;
+//! const WIDTH: usize = m_pdf417_width!(COLS);
+//! const HEIGHT: usize = m_pdf417_height!(ROWS);
+//!
+//! // High-level encoding
+//! let variant = get_variant(ROWS, COLS).unwrap();
+//! let mut input = [0u16; (ROWS * COLS) as usize];
+//! PDF417Encoder::new(&mut input, true)
+//!     .append_num(123456).seal(variant);
+//!
+//! // Rendering
+//! let mut storage = [false; WIDTH * HEIGHT];
+//! MicroPDF417::new(&input, variant).render(&mut storage[..]);
+//! ```
+//!
+//! Do not forget to set the `micro` parameter to true in [PDF417Encoder::new].
 
 #![no_std]
 #![feature(const_mut_refs)]
@@ -241,18 +267,6 @@ impl RenderTarget for [u8] {
     }
 }
 
-#[derive(Debug, Clone)]
-/// Configuration and Rendering of PDF417 barcodes.
-pub struct PDF417<'a> {
-    codewords: &'a [u16],
-    rows: u8,
-    cols: u8,
-    level: u8,
-    scale: (u32, u32),
-    truncated: bool,
-    inverted: bool
-}
-
 const LEADING_ONE: u32 = 1 << 16;
 macro_rules! cw {
     ($tb:ident, $val:expr) => {
@@ -295,12 +309,25 @@ macro_rules! pdf417_height {
     };
 }
 
+#[derive(Debug, Clone)]
+/// Configuration and Rendering of PDF417 barcodes.
+pub struct PDF417<'a> {
+    codewords: &'a [u16],
+    rows: u8,
+    cols: u8,
+    level: u8,
+    scale: (u32, u32),
+    truncated: bool,
+    inverted: bool
+}
+
 impl<'a> PDF417<'a> {
     /// Creates a new PDF417 with the user's data section (codewords slice),
     /// the level of error correction and the layout configuration
     /// (rows and cols). The total codewords capacity is calculated with 
     /// rows \* cols and must be greater or equal to the number of codewords
-    /// in the `codewords` slice.
+    /// in the `codewords` slice. Please make sure your codewords
+    /// slice is valid, you can use [PDF417Encoder] to fill it accordingly.
     pub const fn new(codewords: &'a [u16], rows: u8, cols: u8, level: u8) -> Self {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
@@ -413,8 +440,9 @@ impl<'a> PDF417<'a> {
     /// cols, and rows configuration values are used here to lay down the
     /// pixels to construct a valid barcode according to the specification.
     ///
-    /// **Note**: The scale parameter is handled by the RenderTarget which allows
-    /// for specialized ways of copying the pixel values.
+    /// **Note**: Both scale and inverted parameters are handled by the
+    /// RenderTarget which allows for specialized (and faster) ways of copying
+    /// or updating pixel values.
     pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
         let rows_val = (self.rows as u32 - 1) / 3;
         let cols_val = self.cols as u32 - 1;
@@ -475,9 +503,9 @@ impl<'a> PDF417<'a> {
 }
 
 #[macro_export]
-/// Calculate the width in pixels of a PDF417 barcode according to the
-/// configuration (Columns, X scale, Is Truncated). Only the number of columns
-/// is required, other parameters can be omitted in order.
+/// Calculate the width in pixels of a MicroPDF417 barcode according to the
+/// configuration (Columns, X scale). Only the number of columns is required,
+/// other parameters can be omitted in order.
 macro_rules! m_pdf417_width {
     ($cols:expr) => {
         m_pdf417_width!($cols, 1);
@@ -489,9 +517,9 @@ macro_rules! m_pdf417_width {
 }
 
 #[macro_export]
-/// Calculate the height in pixels of a PDF417 barcode according to the
+/// Calculate the height in pixels of a MicroPDF417 barcode according to the
 /// configuration (Rows, Y scale). Only the number of rows is required, other
-/// parameters can be omitted in order.
+/// parameters can be omitted in order. Note that the default Y scale is 2.
 macro_rules! m_pdf417_height {
     ($rows:expr) => {
         m_pdf417_height!($rows, 2);
@@ -501,33 +529,96 @@ macro_rules! m_pdf417_height {
     };
 }
 
+#[derive(Debug, Clone)]
+/// Configuration and Rendering of MicroPDF417 barcodes.
 pub struct MicroPDF417<'a> {
     codewords: &'a [u16],
-    variant: u8
+    variant: u8,
+    scale: (u32, u32),
+    inverted: bool
 }
 
 impl<'a> MicroPDF417<'a> {
-    /// Creates a new PDF417 with the user's data section (codewords slice),
-    /// the level of error correction and the layout configuration
-    /// (rows and cols). The total codewords capacity is calculated with 
-    /// rows \* cols and must be greater or equal to the number of codewords
-    /// in the `codewords` slice.
+    /// Creates a new MicroPDF417 with the user's data section (codewords slice)
+    /// and the layout configuration (variant). See [get_variant], [find_variant]
+    /// and [variant_dim] for more information. Please make sure your codewords
+    /// slice is valid, you can use [PDF417Encoder] to fill it accordingly.
     pub const fn new(codewords: &'a [u16], variant: u8) -> Self {
         assert!(variant <= 34);
-        MicroPDF417 { codewords, variant }
+        MicroPDF417 { codewords, variant, scale: (1, 2), inverted: false }
     }
 
+    /// Returns the scale of the MicroPDF417 as (Scale X axis, Scale Y axis).
+    pub const fn scale(&self) -> (u32, u32) {
+        self.scale
+    }
+
+    /// Sets the scale of the MicroPDF417 on both axis. The scale tuple stores
+    /// the non-zero scale values as (Scale X axis, Scale Y axis).
+    pub const fn scaled(mut self, scale: (u32, u32)) -> Self {
+        assert!(scale.0 != 0 && scale.1 != 0, "scale cannot be zero");
+        self.scale = scale;
+        self
+    }
+
+    /// Sets the scale of the MicroPDF417 on both axis. See also [scaled](MicroPDF417::scaled).
+    pub const fn set_scaled(&mut self, scale: (u32, u32)) -> &mut Self {
+        assert!(scale.0 != 0 && scale.1 != 0, "scale cannot be zero");
+        self.scale = scale;
+        self
+    }
+
+    /// Returns if the MicroPDF417 is set to be rendered with inverted colors.
+    pub const fn is_inverted(&self) -> bool {
+        self.inverted
+    }
+
+    /// Marks whether this MicroPDF417 should be rendered with pixel values inverted.
+    pub const fn inverted(mut self, inverted: bool) -> Self {
+        self.inverted = inverted;
+        self
+    }
+
+    /// Marks whether this MicroPDF417 should be rendered with pixel values inverted.
+    pub const fn set_inverted(&mut self, inverted: bool) -> &mut Self {
+        self.inverted = inverted;
+        self
+    }
+
+    /// Get the number of rows of the MicroPDF417.
+    pub const fn rows(&self) -> u8 {
+        M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + self.variant as usize] as u8
+    }
+
+    /// Get the number of columns of the MicroPDF417. This is used to lay down
+    /// the left, center and right indicators in the render function.
+    pub const fn cols(&self) -> u8 {
+        M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + self.variant as usize] as u8
+    }
+
+    /// Get the variant number of this MicroPDF417.
+    pub const fn variant(&self) -> u8 {
+        self.variant
+    }
+
+    /// Render the MicroPDF417 to a suitable render target. The scale, variant
+    /// number values are used here to lay down the pixels to construct a valid
+    /// barcode according to the specification.
+    ///
+    /// **Note**: Both scale and inverted parameters are handled by the
+    /// RenderTarget which allows for specialized (and faster) ways of copying
+    /// or updating pixel values.
     pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
         let variant = self.variant as usize;
         let (cols, rows, mut left, mut center, mut right, mut table) = (
-            M_PDF417_VARIANTS[variant] as usize,
-            M_PDF417_VARIANTS[M_PDF417_VARIANTS_COUNT + variant] as usize,
+            self.cols() as usize,
+            self.rows() as usize,
             M_PDF417_RAP[0 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
             M_PDF417_RAP[1 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
             M_PDF417_RAP[2 * M_PDF417_VARIANTS_COUNT + variant] as usize - 1,
             M_PDF417_RAP[3 * M_PDF417_VARIANTS_COUNT + variant] as usize,
         );
-        let mut state = storage.begin((rows as u8, cols as u8, (1, 1), false));
+        let mut state = storage.begin((rows as u8, cols as u8, self.scale, self.inverted));
 
         for row in 0..rows {
             storage.row_start(&mut state);

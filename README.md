@@ -7,7 +7,8 @@
 A no-std and no-alloc PDF417 encoder for embedded applications (also works for
 std). This library implements mutliple encoding modes for numbers, strings and
 bytes according to the specification. You can also customize the rendering of
-the barcodes (size, storage and inverted) and supports the Truncated PDF417.
+the barcodes (size, storage and inverted) and supports both Truncated PDF417
+and MicroPDF417.
 
 ## Usage
 
