@@ -3,7 +3,7 @@
 use crate::ecc;
 
 use awint_core::{InlAwi, Bits};
-type U160 = awint_macros::inlawi_ty!(160);
+type U160 = InlAwi<160, { Bits::unstable_raw_digits(160) }>;
 
 pub const M_LATCH_TEXT: u16 = 900;
 pub const M_LATCH_BYTE: u16 = 901;

@@ -10,7 +10,7 @@ repository = "https://github.com/Sofiman/pdf417/"
 license-file = "LICENSE"
 keywords = ["pdf417", "no-std", "embedded"]
 categories = ["encoding", "embedded", "no-std"]
+exclude = ["./images"]
 
 [dependencies]
 awint_core = { version = "0.11.0", default-features = false }
-awint_macros = { version = "0.11.0", default-features = false }
