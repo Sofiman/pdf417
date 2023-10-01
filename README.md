@@ -42,18 +42,17 @@ use pdf417::*;
 
 const COLS: u8 = 3;
 const ROWS: u8 = 5;
-const ECC_LEVEL: u8 = 1;
 const WIDTH: usize = pdf417_width!(COLS);
 const HEIGHT: usize = pdf417_height!(ROWS);
 
 // High-level encoding
 let mut input = [0u16; (ROWS * COLS) as usize];
-PDF417Encoder::new(&mut input, false)
-    .append_ascii("Hello, world!").seal(ECC_LEVEL);
+let (level, _) = PDF417Encoder::new(&mut input, false)
+    .append_ascii("Hello, world!").fit_seal().unwrap();
 
 // Rendering
 let mut storage = [false; WIDTH * HEIGHT];
-PDF417::new(&input, ROWS, COLS, ECC_LEVEL).render(&mut storage[..]);
+PDF417::new(&input, ROWS, COLS, level).render(&mut storage[..]);
 ```
 
 > If you need a bigger barcode, you can control the size of the modules (see the
