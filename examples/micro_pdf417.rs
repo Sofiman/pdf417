@@ -4,8 +4,8 @@ const WHITE: &str = "\x1B[38;2;255;255;255m█";
 const BLACK: &str = "\x1B[38;2;0;0;0m█";
 
 const PADDING: usize = 4;
-const COLS: u8 = 1;
-const ROWS: u8 = 11;
+const COLS: u8 = 4;
+const ROWS: u8 = 4;
 const V: Option<u8> = get_variant(ROWS, COLS);
 
 const W: usize = m_pdf417_width!(COLS);
