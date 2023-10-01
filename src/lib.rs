@@ -257,7 +257,6 @@ impl RenderTarget for [u8] {
         }
         let w = state.scale.0 as usize;
         while count > 0 {
-            // get upper 8 bits
             count -= 1;
             let is_set = (value >> count) & 1 == 1;
             for _ in 0..w {
@@ -418,7 +417,7 @@ impl<'a> PDF417<'a> {
     pub const fn with_dimensions(mut self, (rows, cols): (u8, u8)) -> Self {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
-        assert!(self.codewords.len() <= (rows as usize * cols as usize),
+        assert!(self.codewords.len() == (rows as usize * cols as usize),
             "The data will not fit in the provided configuration");
         self.rows = rows;
         self.cols = cols;
@@ -429,7 +428,7 @@ impl<'a> PDF417<'a> {
     pub const fn set_dimensions(&mut self, (rows, cols): (u8, u8)) -> &mut Self {
         assert!(rows >= MIN_ROWS && rows <= MAX_ROWS, "The number of rows must be between 3 and 90");
         assert!(cols >= MIN_COLS && cols <= MAX_COLS, "The number of columns must be between 1 and 30");
-        assert!(self.codewords.len() <= (rows as usize * cols as usize),
+        assert!(self.codewords.len() == (rows as usize * cols as usize),
             "The data will not fit in the provided configuration");
         self.rows = rows;
         self.cols = cols;
@@ -444,58 +443,53 @@ impl<'a> PDF417<'a> {
     /// RenderTarget which allows for specialized (and faster) ways of copying
     /// or updating pixel values.
     pub fn render<Target: RenderTarget + ?Sized>(&self, storage: &mut Target) {
-        let rows_val = (self.rows as u32 - 1) / 3;
-        let cols_val = self.cols as u32 - 1;
-        let level_val = self.level as u32 * 3 + (self.rows as u32 - 1) % 3;
+        let (rows, cols) = (self.rows as u32, self.cols as u32);
+        let rows_val = (rows - 1) / 3;
+        let cols_val = cols - 1;
+        let level_val = self.level as u32 * 3 + (rows - 1) % 3;
 
         let mut table = 0;
         let mut state = storage.begin((self.rows, self.cols, self.scale, self.inverted));
-        let mut col = 0;
-        let mut row = 0;
 
-        for &codeword in self.codewords {
-            if col == 0 {
-                storage.row_start(&mut state);
+        for row in 0..rows {
+            storage.row_start(&mut state);
 
-                // row start pattern
-                storage.append_bits(&mut state, START, START_PATTERN_LEN);
+            // row start pattern
+            storage.append_bits(&mut state, START, START_PATTERN_LEN);
 
-                // row left pattern
-                let cw = match table {
-                    0 => rows_val,
-                    1 => level_val,
-                    2 => cols_val,
+            // row left pattern
+            let cw = (row / 3) * 30 + match table {
+                0 => rows_val,
+                1 => level_val,
+                2 => cols_val,
+                _ => unreachable!()
+            };
+            storage.append_bits(&mut state, cw!(table, cw), 17);
+
+            for col in 0..cols {
+                let cw = self.codewords[(row * cols + col) as usize];
+                storage.append_bits(&mut state, cw!(table, cw), 17);
+            }
+
+            if self.truncated {
+                // stop pattern reduced to one module width bar
+                storage.append_bits(&mut state, 1, 1);
+            } else {
+                // row right codeword
+                let cw = (row / 3) * 30 + match table {
+                    0 => cols_val,
+                    1 => rows_val,
+                    2 => level_val,
                     _ => unreachable!()
                 };
-                storage.append_bits(&mut state, cw!(table, (row / 3) * 30 + cw), 17);
+                storage.append_bits(&mut state, cw!(table, cw), 17);
+
+                storage.append_bits(&mut state, END, END_PATTERN_LEN);
             }
 
-            storage.append_bits(&mut state, cw!(table, codeword), 17);
-            col += 1;
+            storage.row_end(&mut state);
 
-            if col == self.cols {
-                if self.truncated {
-                    // stop pattern reduced to one module width bar
-                    storage.append_bits(&mut state, 1, 1);
-                } else {
-                    // row right codeword
-                    let cw = match table {
-                        0 => cols_val,
-                        1 => rows_val,
-                        2 => level_val,
-                        _ => unreachable!()
-                    };
-                    storage.append_bits(&mut state, cw!(table, (row / 3) * 30 + cw), 17);
-
-                    storage.append_bits(&mut state, END, END_PATTERN_LEN);
-                }
-
-                storage.row_end(&mut state);
-
-                col = 0;
-                row += 1;
-                if table == 2 { table = 0; } else { table += 1 };
-            }
+            if table == 2 { table = 0; } else { table += 1 };
         }
 
         storage.end(state);
