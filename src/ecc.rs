@@ -3,6 +3,7 @@
 use crate::tables::*;
 
 /// Returns the number of ECC codewords required by the specified level (0-8)
+/// of a regular PDF417.
 ///
 /// | ECC Level | Number of ECC codewords |
 /// |-----------|-------------------------|
@@ -26,7 +27,8 @@ pub const fn ecc_count(level: u8) -> usize {
 /// The ECC is calculated for the (total-N) first codewords where total is the
 /// length of the codewords slice.
 pub fn generate_ecc(codewords: &mut [u16], level: u8) {
-    let factors: &[u16] = match level {
+    assert!(level <= 8, "ECC level must be between 0 and 8 inclusive");
+    let factors: &'static [u16] = match level {
         0 => &ECC_L0,
         1 => &ECC_L1,
         2 => &ECC_L2,
@@ -36,10 +38,25 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
         6 => &ECC_L6,
         7 => &ECC_L7,
         8 => &ECC_L8,
-        _ => panic!("ECC level must be between 0 and 8 inclusive")
+        _ => unreachable!()
     };
 
     assert!(codewords.len() >= factors.len(), "ECC codewords could not fit in buffer");
+    generate_ecc_codewords(factors, codewords);
+}
+
+/// Calculate and stores the ECC codewords in the slice `codewords` in-place.
+/// The last **N** codewords are overwritten by the ECC codewords where **N**
+/// is the number of ECC codewords to insert according to the k offset
+/// (depending on the variant of the MicroPDF417). The ECC is calculated for the
+/// (total-N) first codewords where total is the length of the codewords slice.
+pub fn generate_micro_ecc(codewords: &mut [u16], count: usize, k: usize) {
+    assert!(count > 0, "count cannot be empty");
+    assert!(codewords.len() >= count);
+    generate_ecc_codewords(&ECC_MICRO[k..(k+count)], codewords);
+}
+
+fn generate_ecc_codewords(factors: &'static [u16], codewords: &mut [u16]) {
     let (data, ecc) = codewords.split_at_mut(codewords.len() - factors.len());
     ecc.fill(0);
 
@@ -50,28 +67,6 @@ pub fn generate_ecc(codewords: &mut [u16], level: u8) {
             let factor = ((t as usize * factors[i] as usize) % 929) as u16;
             let d = if i > 0 { ecc[factors.len() - i] } else { 0 };
             ecc[factors.len() - 1 - i] = (d + 929 - factor) % 929;
-        }
-    }
-
-    for e in ecc {
-        if *e != 0 {
-            *e = 929 - *e;
-        }
-    }
-}
-
-pub fn generate_micro_ecc(codewords: &mut [u16], count: usize, k: usize) {
-    assert!(codewords.len() >= count);
-    let (data, ecc) = codewords.split_at_mut(codewords.len() - count);
-    ecc.fill(0);
-
-    for cw in data {
-        let t = (*cw + ecc[0]) % 929;
-
-        for i in (0..count).rev() {
-            let factor = ((t as usize * ECC_MICRO[k + i] as usize) % 929) as u16;
-            let d = if i > 0 { ecc[count - i] } else { 0 };
-            ecc[count - 1 - i] = (d + 929 - factor) % 929;
         }
     }
 
