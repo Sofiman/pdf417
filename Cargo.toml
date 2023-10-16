@@ -1,6 +1,6 @@
 [package]
 name = "pdf417"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Sofiane"]
 description = "No-std PDF417 encoder"
@@ -10,7 +10,7 @@ repository = "https://github.com/Sofiman/pdf417/"
 license-file = "LICENSE"
 keywords = ["pdf417", "no-std", "embedded"]
 categories = ["encoding", "embedded", "no-std"]
-exclude = ["./images"]
+exclude = ["/images"]
 
 [dependencies]
 awint_core = { version = "0.11.0", default-features = false }

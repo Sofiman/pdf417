@@ -65,6 +65,7 @@
 //! Do not forget to set the `micro` parameter to true in [PDF417Encoder::new].
 
 #![no_std]
+#![warn(missing_docs)]
 #![feature(const_mut_refs)]
 
 mod tables;
