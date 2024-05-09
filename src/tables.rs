@@ -2982,62 +2982,85 @@ pub const M_PDF417_CENTER: [u16; 52] = [
     0x2DC, 0x2DE
 ];
 
-/// Get the variant number for a dimension (rows, cols). Returns None the
-/// combinaison of rows and cols is invalid (not supported) according to the
-/// MicroPDF417 specification.
-pub const fn get_variant(rows: u8, cols: u8) -> Option<u8> {
-    let mut start = 0;
-    while start < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[start] != cols as u16 {
-        start += 1;
+#[derive(Debug, Clone, Copy)]
+pub struct Variant(u8);
+
+impl Variant {
+    #[inline]
+    pub const fn rows(&self) -> u8 {
+        M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + self.0 as usize] as u8
     }
 
-    if start == M_PDF417_VARIANTS_COUNT {
-        return None; // the number of cols is invalid
+    #[inline]
+    pub const fn cols(&self) -> u8 {
+        M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + self.0 as usize] as u8
     }
 
-    let mut end = start;
-    while end < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[end] == cols as u16 {
-        end += 1;
+    #[inline]
+    pub const fn variant(&self) -> u8 {
+        self.0
     }
 
-    while start < end && M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + start] != rows as u16 {
-        start += 1;
-    }
-
-    if start == end {
-        return None; // the number of rows is invalid
-    }
-
-    Some(start as u8)
-}
-
-/// Find a suitable variant that has at least `capacity` free codeword slots.
-/// None if capacity is too large to be stored by a MicroPDF417.
-pub const fn find_variant(capacity: usize) -> Option<u8> {
-    let mut i = 0;
-
-    while i < M_PDF417_VARIANTS_COUNT {
-        if M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + i] as usize
-         * M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + i] as usize
-         - M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + i] as usize >= capacity {
-             break;
+    /// Get the variant number for a dimension (rows, cols). Returns None the
+    /// combinaison of rows and cols is invalid (not supported) according to the
+    /// MicroPDF417 specification.
+    pub const fn with_dimensions(rows: u8, cols: u8) -> Option<Variant> {
+        let mut start = 0;
+        while start < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[start] != cols as u16 {
+            start += 1;
         }
-        i += 1;
+
+        if start == M_PDF417_VARIANTS_COUNT {
+            return None; // the number of cols is invalid
+        }
+
+        let mut end = start;
+        while end < M_PDF417_VARIANTS_COUNT && M_PDF417_VARIANTS[end] == cols as u16 {
+            end += 1;
+        }
+
+        while start < end && M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + start] != rows as u16 {
+            start += 1;
+        }
+
+        if start == end {
+            return None; // the number of rows is invalid
+        }
+
+        Some(Variant(start as u8))
     }
 
-    if i == M_PDF417_VARIANTS_COUNT {
-        None
-    } else {
-        Some(i as u8)
+    /// Find a suitable variant that has at least `capacity` free codeword slots.
+    /// None if capacity is too large to be stored by a MicroPDF417.
+    pub const fn with_capacity(capacity: usize) -> Option<Variant> {
+        let mut i = 0;
+
+        while i < M_PDF417_VARIANTS_COUNT {
+            if M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + i] as usize
+             * M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + i] as usize
+             - M_PDF417_VARIANTS[2 * M_PDF417_VARIANTS_COUNT + i] as usize >= capacity {
+                 break;
+            }
+            i += 1;
+        }
+
+        if i < M_PDF417_VARIANTS_COUNT {
+            Some(Variant(i as u8))
+        } else {
+            None
+        }
     }
 }
 
-/// Returns the dimensions of a MicroPDF417 variant as (rows, cols).
-#[inline]
-pub const fn variant_dim(variant: u8) -> (u8, u8) {
-    assert!(variant <= 34, "invalid variant (0-34)");
-    (
-        M_PDF417_VARIANTS[0 * M_PDF417_VARIANTS_COUNT + variant as usize] as u8,
-        M_PDF417_VARIANTS[1 * M_PDF417_VARIANTS_COUNT + variant as usize] as u8
-    )
+impl From<u8> for Variant {
+    fn from(variant: u8) -> Variant {
+        assert!(variant < M_PDF417_VARIANTS_COUNT as u8, "The variant must be between 0 and 33");
+        Variant(variant)
+    }
+}
+
+impl Into<u8> for Variant {
+    fn into(self) -> u8 {
+        self.0
+    }
 }

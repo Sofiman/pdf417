@@ -1,6 +1,6 @@
 //! User data to high level encoding conversion functions
 
-use crate::{ecc, find_variant};
+use crate::{ecc, Variant};
 
 use awint_core::{InlAwi, Bits};
 type U160 = InlAwi<160, { Bits::unstable_raw_digits(160) }>;
@@ -458,7 +458,7 @@ impl<'a> PDF417Encoder<'a> {
     /// does not exist, None is returned.
     pub fn fit_ecc(&self) -> Option<u8> {
         if self.micro {
-            find_variant(self.used)
+            Variant::with_capacity(self.used).map(|v| v.into())
         } else {
             let remaining = self.capacity() - self.used;
             let mut level = 9;

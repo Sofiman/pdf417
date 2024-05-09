@@ -6,7 +6,7 @@ const BLACK: &str = "\x1B[38;2;0;0;0m█";
 const PADDING: usize = 4;
 const COLS: u8 = 2;
 const ROWS: u8 = 5;
-const SCALE: (u32, u32) = (1, 3);
+const SCALE: (u16, u16) = (1, 3);
 
 const W: usize = pdf417_width!(COLS, SCALE.0);
 const H: usize = pdf417_height!(ROWS, SCALE.1);
@@ -18,8 +18,10 @@ fn main() {
         .fit_seal().unwrap();
 
     let mut storage = [0u8; ((W - 1) / 8 + 1) * H];
-    let pdf417 = PDF417::new(&input, ROWS, COLS, level).scaled(SCALE);
-    pdf417.render(&mut storage[..]);
+    let pdf417 = PDF417::new(&input, ROWS, COLS, level)
+        .render()
+        .set_scale(SCALE);
+    pdf417.render_bitmap(&mut storage[..]);
 
     let mut col = 0;
     for _ in 0..((PADDING+1)/2) {

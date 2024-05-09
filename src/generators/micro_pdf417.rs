@@ -1,8 +1,7 @@
 use core::iter;
 
-use crate::{HL_TO_LL, M_PDF417_VARIANTS, M_PDF417_VARIANTS_COUNT, M_PDF417_RAP, M_PDF417_SIDE, M_PDF417_CENTER};
-use crate::generators::generator::{PDF417Columns, START_PAT, END_PAT};
-use crate::generators::bitfield::Bitfield;
+use crate::{HL_TO_LL, M_PDF417_VARIANTS_COUNT, M_PDF417_RAP, M_PDF417_SIDE, M_PDF417_CENTER};
+use crate::generators::{row::{Row, FixedSize}, bitfield::Bitfield};
 
 macro_rules! cw {
     ($val:expr) => {
@@ -33,8 +32,11 @@ pub struct MicroPDF417Row<'a> {
     table: u8,
 }
 
-impl<'a> PDF417Columns<'a> for MicroPDF417Row<'a> {
+impl<'a> FixedSize for MicroPDF417Row<'a> {}
+
+impl<'a> Row<'a> for MicroPDF417Row<'a> {
     type Info = (u8, u8, u8, u8);
+    const DEFAULT_SCALE: (u16, u16) = (1, 2);
 
     fn init(codewords: &'a [u16], row: u8, infos: Self::Info) -> Self {
         Self {

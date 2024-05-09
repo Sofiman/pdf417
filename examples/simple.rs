@@ -18,7 +18,7 @@ fn main() {
 
     let mut storage = [false; W * H];
     let pdf417 = PDF417::new(&input, ROWS, COLS, level);
-    pdf417.render(&mut storage[..]);
+    pdf417.render().fill_bits(&mut storage[..]);
 
     let mut col = 0;
     for _ in 0..((PADDING+1)/2) {

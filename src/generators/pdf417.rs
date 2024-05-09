@@ -1,8 +1,6 @@
 use core::iter;
-
-use crate::HL_TO_LL;
-use crate::generators::generator::{PDF417Columns, START_PAT, END_PAT};
-use crate::generators::bitfield::Bitfield;
+use crate::{HL_TO_LL, START_PATTERN, END_PATTERN};
+use crate::generators::{row::{FreeSize, Row}, bitfield::Bitfield};
 
 macro_rules! cw {
     ($tb:expr, $val:expr) => {
@@ -58,8 +56,11 @@ impl<'a, const TRUNCATED: bool> PDF417Row<'a, TRUNCATED> {
     }
 }
 
-impl<'a> PDF417Columns<'a> for PDF417Row<'a, false> {
+impl<'a, const TRUNCATED: bool> FreeSize for PDF417Row<'a, TRUNCATED> {}
+
+impl<'a> Row<'a> for PDF417Row<'a, false> {
     type Info = (u8, u8, u8);
+    const DEFAULT_SCALE: (u16, u16) = (1, 1);
 
     fn init(codewords: &'a [u16], row: u8, infos: (u8, u8, u8)) -> Self {
         Self::new(codewords, row, infos)
@@ -75,7 +76,7 @@ impl<'a> iter::Iterator for PDF417Row<'a, false> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (item, next) = match self.next_pat {
-            RowPattern::Start => (Some(START_PAT), RowPattern::Left),
+            RowPattern::Start => (Some(START_PATTERN), RowPattern::Left),
             RowPattern::Left => (Some(cw!(self.table, self.markers.0)), RowPattern::Data),
             RowPattern::Data => {
                 let cw = self.codewords[0];
@@ -86,7 +87,7 @@ impl<'a> iter::Iterator for PDF417Row<'a, false> {
                 (Some(cw!(self.table, cw)), next)
             },
             RowPattern::Right => (Some(cw!(self.table, self.markers.1)), RowPattern::End),
-            RowPattern::End => (Some(END_PAT), RowPattern::None),
+            RowPattern::End => (Some(END_PATTERN), RowPattern::None),
             RowPattern::None => (None, RowPattern::None)
         };
 
@@ -110,8 +111,9 @@ impl<'a> iter::Iterator for PDF417Row<'a, false> {
 impl<'a> ExactSizeIterator for PDF417Row<'a, false> {}
 impl<'a> iter::FusedIterator for PDF417Row<'a, false> {}
 
-impl<'a> PDF417Columns<'a> for PDF417Row<'a, true> {
+impl<'a> Row<'a> for PDF417Row<'a, true> {
     type Info = (u8, u8, u8);
+    const DEFAULT_SCALE: (u16, u16) = (1, 1);
 
     fn init(codewords: &'a [u16], row: u8, infos: (u8, u8, u8)) -> Self {
         Self::new(codewords, row, infos)
@@ -127,7 +129,7 @@ impl<'a> iter::Iterator for PDF417Row<'a, true> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (item, next) = match self.next_pat {
-            RowPattern::Start => (Some(START_PAT), RowPattern::Left),
+            RowPattern::Start => (Some(START_PATTERN), RowPattern::Left),
             RowPattern::Left => (Some(cw!(self.table, self.markers.0)), RowPattern::Data),
             RowPattern::Data => {
                 let cw = self.codewords[0];

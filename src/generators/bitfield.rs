@@ -14,7 +14,7 @@ impl Bitfield {
     }
 
     #[inline]
-    pub const fn count(&self) -> u8 {
+    pub const fn size(&self) -> u8 {
         (self.0 & 0xFF) as u8
     }
 
