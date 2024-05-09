@@ -8,7 +8,7 @@ macro_rules! cw {
         M_PDF417_SIDE[$val as usize] as u32
     };
     ($tb:expr, $val:expr) => {
-        Bitfield::new((1 << 16) | HL_TO_LL[$tb as usize * 929 + $val as usize] as u32, 17)
+        Bitfield::new((1 << 16) | HL_TO_LL[$tb as usize][$val as usize] as u32, 17)
     }
 }
 
