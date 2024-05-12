@@ -134,7 +134,7 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
         self
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = bool> + 'a {
+    pub fn bits(&self) -> impl Iterator<Item = bool> + 'a {
         let (sx, sy) = self.scale;
         let invert = self.inverted;
         self.inner.iter()
@@ -145,7 +145,7 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
     }
 
     pub fn fill<P: Clone>(&self, target: &mut [P], on: &P, off: &P) {
-        for (i, bit) in self.iter().enumerate() {
+        for (i, bit) in self.bits().enumerate() {
             target[i] = if bit { on.clone() } else { off.clone() };
         }
     }
@@ -157,7 +157,7 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
     pub fn fill_bitmap(&self, target: &mut [u8]) {
         let mut i = 0;
         let mut mask: u8 = 7;
-        for bit in self.iter() {
+        for bit in self.bits() {
             if mask == 0 {
                 i += 1;
                 mask = 7;
