@@ -14,3 +14,8 @@ exclude = ["/images"]
 
 [dependencies]
 awint_core = { version = "0.11.0", default-features = false }
+embedded-graphics = { version = "0.8.1", default-features = false, optional = true }
+
+[features]
+default = ["embedded-graphics"]
+embedded-graphics = ["dep:embedded-graphics"]

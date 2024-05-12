@@ -1,6 +1,14 @@
 use core::marker::PhantomData;
 use crate::{generators::row::{Row, FixedSize, FreeSize}, tables::Variant};
 
+#[cfg(feature = "embedded-graphics")]
+use embedded_graphics::{
+    prelude::{DrawTarget, Point},
+    pixelcolor::BinaryColor,
+    primitives::rectangle::Rectangle,
+    geometry
+};
+
 /// Minimum number of rows in a PDF417 barcode.
 pub const MIN_ROWS: u8 = 3;
 /// Maximum number of rows in a PDF417 barcode.
@@ -55,7 +63,10 @@ impl<'a, R: Row<'a> + 'a> PDF417<'a, R> {
          PDF417Render {
              inner: self,
              scale: R::DEFAULT_SCALE,
-             inverted: false
+             inverted: false,
+
+             #[cfg(feature = "embedded-graphics")]
+             top_left: Point::zero()
          }
     }
 }
@@ -93,7 +104,10 @@ impl<'a, R: Row<'a> + 'a + FreeSize> PDF417<'a, R> {
 pub struct PDF417Render<'a, R: Row<'a> + 'a> {
     inner: PDF417<'a, R>,
     scale: (u16, u16),
-    inverted: bool
+    inverted: bool,
+
+    #[cfg(feature = "embedded-graphics")]
+    top_left: geometry::Point,
 }
 
 impl<'a, R: Row<'a> + 'a> From<PDF417<'a, R>> for PDF417Render<'a, R> {
@@ -111,6 +125,10 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
         self.inner.rows() as u32 * self.scale.1 as u32
     }
 
+    #[cfg(feature = "embedded-graphics")]
+    pub fn size(&self) -> geometry::Size {
+        geometry::Size::new(self.width() as u32, self.height() as u32)
+    }
 
     /// Returns the scale of the PDF417 as (Scale X axis, Scale Y axis).
     pub const fn scale(&self) -> (u16, u16) {
@@ -131,6 +149,12 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
     /// Marks whether this PDF417 should be rendered with pixel values inverted.
     pub const fn set_inverted(mut self, inverted: bool) -> Self {
         self.inverted = inverted;
+        self
+    }
+
+    #[cfg(feature = "embedded-graphics")]
+    pub const fn set_top_left(mut self, top_left: embedded_graphics::geometry::Point) -> Self {
+        self.top_left = top_left;
         self
     }
 
@@ -166,5 +190,24 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
                 mask -= 1;
             }
         }
+    }
+}
+
+#[cfg(feature = "embedded-graphics")]
+impl<'a, R> embedded_graphics::Drawable for PDF417Render<'a, R>
+where
+    R: Row<'a> + 'a,
+{
+    type Color = BinaryColor;
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        let rect = Rectangle::new(self.top_left, self.size());
+        let colors = self.bits().map(BinaryColor::from);
+        target.fill_contiguous(&rect, colors)?;
+        Ok(())
     }
 }
