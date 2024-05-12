@@ -29,6 +29,13 @@ pub struct PDF417Row<'a, const TRUNCATED: bool> {
 }
 
 impl<'a, const TRUNCATED: bool> PDF417Row<'a, TRUNCATED> {
+    fn prepare((rows, cols): (u8, u8), level: u8) -> (u8, u8, u8) {
+        let rows_val = (rows - 1) / 3;
+        let cols_val = cols - 1;
+        let level_val = level * 3 + (rows - 1) % 3;
+        (rows_val, cols_val, level_val)
+    }
+
     fn new(codewords: &'a [u16], row: u8, infos: (u8, u8, u8)) -> Self {
         let (rows_val, cols_val, level_val) = infos;
         let table = row % 3;
@@ -47,13 +54,6 @@ impl<'a, const TRUNCATED: bool> PDF417Row<'a, TRUNCATED> {
             next_pat: RowPattern::Start
         }
     }
-
-    fn prepare((rows, cols): (u8, u8), level: u8) -> (u8, u8, u8) {
-        let rows_val = (rows - 1) / 3;
-        let cols_val = cols - 1;
-        let level_val = level * 3 + (rows - 1) % 3;
-        (rows_val, cols_val, level_val)
-    }
 }
 
 impl<'a, const TRUNCATED: bool> FreeSize for PDF417Row<'a, TRUNCATED> {}
@@ -62,12 +62,16 @@ impl<'a> Row<'a> for PDF417Row<'a, false> {
     type Info = (u8, u8, u8);
     const DEFAULT_SCALE: (u16, u16) = (1, 1);
 
+    fn prepare(dimensions: (u8, u8), level: u8) -> Self::Info {
+        Self::prepare(dimensions, level)
+    }
+
     fn init(codewords: &'a [u16], row: u8, infos: (u8, u8, u8)) -> Self {
         Self::new(codewords, row, infos)
     }
 
-    fn prepare(dimensions: (u8, u8), level: u8) -> Self::Info {
-        Self::prepare(dimensions, level)
+    fn width(dimensions: (u8, u8)) -> u32 {
+        START_PATTERN.size() as u32 + /* left */ 17 + dimensions.1 as u32 * 17 + /* right */ 17 + END_PATTERN.size() as u32
     }
 }
 
@@ -121,6 +125,10 @@ impl<'a> Row<'a> for PDF417Row<'a, true> {
 
     fn prepare(dimensions: (u8, u8), level: u8) -> Self::Info {
         Self::prepare(dimensions, level)
+    }
+
+    fn width(dimensions: (u8, u8)) -> u32 {
+        START_PATTERN.size() as u32 + /* left */ 17 + dimensions.1 as u32 * 17 + /* end */ 1
     }
 }
 

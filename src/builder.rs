@@ -98,22 +98,27 @@ pub struct PDF417Render<'a, R: Row<'a> + 'a> {
 
 impl<'a, R: Row<'a> + 'a> From<PDF417<'a, R>> for PDF417Render<'a, R> {
     fn from(inner: PDF417<'a, R>) -> Self {
-         Self {
-             inner,
-             scale: R::DEFAULT_SCALE,
-             inverted: false
-         }
+        inner.render()
     }
 }
 
 impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
+    pub fn width(&self) -> u32 {
+        R::width(self.inner.dimensions) * self.scale.0 as u32
+    }
+
+    pub const fn height(&self) -> u32 {
+        self.inner.rows() as u32 * self.scale.1 as u32
+    }
+
+
     /// Returns the scale of the PDF417 as (Scale X axis, Scale Y axis).
     pub const fn scale(&self) -> (u16, u16) {
         self.scale
     }
 
     /// Sets the scale of the PDF417 on both axis. See also [scaled](PDF417::scaled).
-    pub  fn set_scale(mut self, scale: (u16, u16)) -> Self {
+    pub const fn set_scale(mut self, scale: (u16, u16)) -> Self {
         self.scale = scale;
         self
     }

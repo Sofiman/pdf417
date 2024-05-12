@@ -38,6 +38,16 @@ impl<'a> Row<'a> for MicroPDF417Row<'a> {
     type Info = (u8, u8, u8, u8);
     const DEFAULT_SCALE: (u16, u16) = (1, 2);
 
+    fn prepare(_dimensions: (u8, u8), variant: u8) -> Self::Info {
+        // TODO: assert that dimensions are the same as the variant
+        (
+            M_PDF417_RAP[0 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
+            M_PDF417_RAP[1 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
+            M_PDF417_RAP[2 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
+            M_PDF417_RAP[3 * M_PDF417_VARIANTS_COUNT + variant as usize],
+        )
+    }
+
     fn init(codewords: &'a [u16], row: u8, infos: Self::Info) -> Self {
         Self {
             codewords,
@@ -50,14 +60,8 @@ impl<'a> Row<'a> for MicroPDF417Row<'a> {
         }
     }
 
-    fn prepare(_dimensions: (u8, u8), variant: u8) -> Self::Info {
-        // TODO: assert that dimensions are the same as the variant
-        (
-            M_PDF417_RAP[0 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
-            M_PDF417_RAP[1 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
-            M_PDF417_RAP[2 * M_PDF417_VARIANTS_COUNT + variant as usize] - 1,
-            M_PDF417_RAP[3 * M_PDF417_VARIANTS_COUNT + variant as usize],
-        )
+    fn width(dimensions: (u8, u8)) -> u32 {
+        /* start */ 10 + dimensions.0 as u32 * 17 + /* middle */ if dimensions.0 > 2 { 10 } else { 0 } + /* end */ 11
     }
 }
 
