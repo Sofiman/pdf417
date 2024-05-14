@@ -184,15 +184,16 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
     }
 
     pub fn fill_bitmap(&self, target: &mut [u8]) {
-        let mut i = 0;
-        let mut mask: u8 = 7;
+        let mut row_start = 0;
+        let mut col = 0;
+        let width = self.width() as usize;
         for bit in self.bits() {
-            if mask == 0 {
-                i += 1;
-                mask = 7;
-            } else {
-                target[i] |= (bit as u8) << mask;
-                mask -= 1;
+            target[row_start + col / 8] |= (bit as u8) << (7 - col % 8);
+
+            col += 1;
+            if col == width {
+                row_start += 1 + col / 8;
+                col = 0;
             }
         }
     }
