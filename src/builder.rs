@@ -153,7 +153,12 @@ impl<'a, R: Row<'a> + 'a> PDF417Render<'a, R> {
     }
 
     #[cfg(feature = "embedded-graphics")]
-    pub const fn set_top_left(mut self, top_left: embedded_graphics::geometry::Point) -> Self {
+    pub const fn top_left(&self) -> geometry::Point {
+        self.top_left
+    }
+
+    #[cfg(feature = "embedded-graphics")]
+    pub const fn set_top_left(mut self, top_left: geometry::Point) -> Self {
         self.top_left = top_left;
         self
     }
